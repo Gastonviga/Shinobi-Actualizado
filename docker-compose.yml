@@ -1,0 +1,130 @@
+# TitanNVR - Docker Compose Configuration
+# Sistema de Videovigilancia Empresarial
+
+services:
+  # Motor de Video - Go2RTC
+  # Convierte RTSP a WebRTC/MSE con latencia cero
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    container_name: titan-go2rtc
+    restart: unless-stopped
+    ports:
+      - "1984:1984"   # API HTTP + WebRTC/MSE streams
+      - "8554:8554"   # RTSP server
+      - "8555:8555"   # WebRTC (TCP)
+    volumes:
+      - ./config:/config  # Writable for dynamic stream config
+    environment:
+      - TZ=America/Argentina/Buenos_Aires
+    networks:
+      - titan-network
+
+  # Backend - FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: titan-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./storage:/app/storage
+      - ./config:/config  # For Frigate config generation
+      - //var/run/docker.sock:/var/run/docker.sock  # For container restart (Linux/Mac)
+      # Windows: use named pipe - //./pipe/docker_engine:/var/run/docker.sock
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./storage/titannvr.db
+      - GO2RTC_URL=http://go2rtc:1984
+      - GO2RTC_CONTAINER=titan-go2rtc
+      - DEBUG=true
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - go2rtc
+    networks:
+      - titan-network
+
+  # Frontend - React + Vite
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: titan-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Anonymous volume to preserve node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+      - VITE_GO2RTC_URL=http://localhost:1984
+    depends_on:
+      - backend
+    networks:
+      - titan-network
+
+  # MQTT Broker - Mosquitto
+  # Message broker for Frigate events
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: titan-mqtt
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./config/mosquitto:/mosquitto/config
+      - ./storage/mosquitto:/mosquitto/data
+    networks:
+      - titan-network
+
+  # AI Detection - Frigate NVR
+  # Object detection using streams from Go2RTC
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: titan-frigate
+    restart: unless-stopped
+    privileged: true  # Required for hardware access
+    shm_size: "128mb"  # Prevent crashes with multiple cameras
+    ports:
+      - "5000:5000"   # Frigate Web UI / API
+      - "8971:8971"   # Frigate WebRTC
+    volumes:
+      - ./config/frigate.yml:/config/config.yml
+      - ./storage/frigate:/media/frigate
+      - /etc/localtime:/etc/localtime:ro
+      # Optional: Coral TPU support
+      # - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - FRIGATE_RTSP_PASSWORD=titan123
+    depends_on:
+      - go2rtc
+      - mqtt
+    networks:
+      - titan-network
+
+  # Cloud Backup - Rclone
+  # Syncs recordings to Google Drive or other cloud storage
+  backup_service:
+    image: rclone/rclone:latest
+    container_name: titan-backup
+    restart: unless-stopped
+    ports:
+      - "5572:5572"   # Rclone Web GUI
+    volumes:
+      - ./storage:/data:ro           # Read recordings
+      - ./config/rclone:/config/rclone  # Rclone config
+    command: rcd --rc-web-gui --rc-addr :5572 --rc-no-auth
+    networks:
+      - titan-network
+
+networks:
+  titan-network:
+    driver: bridge
+    name: titan-network
+
+volumes:
+  storage:
+    driver: local

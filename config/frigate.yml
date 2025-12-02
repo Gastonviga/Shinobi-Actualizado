@@ -1,0 +1,75 @@
+# TitanNVR - Frigate Configuration
+# Auto-generated - DO NOT EDIT MANUALLY
+# Changes will be overwritten when cameras are modified
+
+mqtt:
+  enabled: true
+  host: mqtt
+  port: 1883
+  topic_prefix: frigate
+  client_id: frigate
+detectors:
+  cpu1:
+    type: cpu
+    num_threads: 2
+database:
+  path: /media/frigate/frigate.db
+model:
+  width: 320
+  height: 320
+record:
+  enabled: true
+  retain:
+    days: 7
+    mode: motion
+snapshots:
+  enabled: true
+  timestamp: true
+  bounding_box: true
+  retain:
+    default: 14
+objects:
+  track:
+    - person
+    - car
+    - dog
+    - cat
+  filters:
+    person:
+      min_score: 0.5
+      threshold: 0.7
+go2rtc:
+  streams:
+    celular_prueba: rtsp://go2rtc:8554/celular_prueba_sub
+ui:
+  timezone: America/Argentina/Buenos_Aires
+logger:
+  default: info
+  logs:
+    frigate.event: debug
+cameras:
+  celular_prueba:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/celular_prueba_sub
+          roles:
+            - detect
+        - path: rtsp://go2rtc:8554/celular_prueba_main
+          roles:
+            - record
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+    record:
+      enabled: true
+    snapshots:
+      enabled: true
+    objects:
+      track:
+        - person
+detect:
+  enabled: true
+version: 0.16-0

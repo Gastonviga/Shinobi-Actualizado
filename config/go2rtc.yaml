@@ -1,0 +1,14 @@
+api:
+    listen: :1984
+    origin: '*'
+log:
+    level: info
+rtsp:
+    listen: :8554
+streams:
+    celular_prueba_main: http://192.168.1.7:8080/video
+    celular_prueba_sub: http://192.168.1.7:8080/video
+webrtc:
+    candidates:
+        - stun:stun.l.google.com:19302
+    listen: :8555/tcp
