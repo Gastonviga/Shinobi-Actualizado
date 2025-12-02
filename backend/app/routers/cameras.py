@@ -1,5 +1,6 @@
 """
 TitanNVR - Cameras Router
+Enterprise v2.0 with advanced recording configuration
 """
 import logging
 from typing import List
@@ -8,8 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, async_session_maker
-from app.models.camera import Camera
-from app.schemas.camera import CameraCreate, CameraUpdate, CameraResponse
+from app.models.camera import Camera, RecordingMode
+from app.schemas.camera import (
+    CameraCreate, CameraUpdate, CameraResponse, RECORDING_MODES_INFO,
+    CameraBulkCreate, CameraBulkResponse, CameraBulkDelete, CameraBulkDeleteResponse
+)
 from app.services.stream_manager import stream_manager
 from app.services.config_generator import sync_frigate_config
 
@@ -22,19 +26,24 @@ router = APIRouter(prefix="/cameras", tags=["Cameras"])
 # ============================================================
 
 async def sync_all_to_frigate():
-    """Background task to sync all cameras to Frigate config"""
+    """Background task to sync all cameras to Frigate config with enterprise settings"""
     try:
         async with async_session_maker() as session:
             result = await session.execute(select(Camera))
             cameras = result.scalars().all()
             
-            # Convert to dicts for config generator
+            # Convert to dicts for config generator including enterprise settings
             camera_dicts = [
                 {
                     "name": c.name,
                     "is_active": c.is_active,
                     "main_stream_url": c.main_stream_url,
                     "sub_stream_url": c.sub_stream_url,
+                    # Enterprise settings
+                    "retention_days": c.retention_days,
+                    "recording_mode": c.recording_mode,
+                    "event_retention_days": c.event_retention_days,
+                    "zones_config": c.zones_config,
                 }
                 for c in cameras
             ]
@@ -57,6 +66,19 @@ async def get_cameras(
     )
     cameras = result.scalars().all()
     return cameras
+
+
+@router.get("/recording-modes/info")
+async def get_recording_modes_info():
+    """
+    Get information about available recording modes.
+    
+    Useful for frontend to display descriptions and storage impact.
+    """
+    return {
+        "modes": [mode.dict() for mode in RECORDING_MODES_INFO],
+        "default": "motion"
+    }
 
 
 @router.get("/{camera_id}", response_model=CameraResponse)
@@ -110,6 +132,88 @@ async def create_camera(
     background_tasks.add_task(sync_all_to_frigate)
     
     return camera
+
+
+@router.post("/bulk", response_model=CameraBulkResponse)
+async def create_cameras_bulk(
+    bulk_data: CameraBulkCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Bulk create multiple cameras in a single transaction.
+    
+    - Validates for duplicate names
+    - Registers all streams in Go2RTC
+    - Syncs Frigate config once at the end
+    """
+    created_cameras = []
+    errors = []
+    
+    # Get existing camera names for duplicate check
+    result = await db.execute(select(Camera.name))
+    existing_names = {row[0].lower() for row in result.fetchall()}
+    
+    # Process each camera
+    for i, camera_data in enumerate(bulk_data.cameras):
+        # Check for duplicates
+        if camera_data.name.lower() in existing_names:
+            errors.append(f"Camera '{camera_data.name}' already exists")
+            continue
+        
+        # Check for duplicates within the batch
+        if camera_data.name.lower() in {c.name.lower() for c in created_cameras}:
+            errors.append(f"Duplicate name in batch: '{camera_data.name}'")
+            continue
+        
+        try:
+            camera = Camera(**camera_data.model_dump())
+            db.add(camera)
+            await db.flush()
+            await db.refresh(camera)
+            created_cameras.append(camera)
+            existing_names.add(camera_data.name.lower())
+        except Exception as e:
+            errors.append(f"Failed to create '{camera_data.name}': {str(e)}")
+    
+    # Commit all changes
+    await db.commit()
+    
+    # Register all streams in Go2RTC
+    for camera in created_cameras:
+        try:
+            await stream_manager.register_stream(
+                name=camera.name,
+                main_stream_url=camera.main_stream_url,
+                sub_stream_url=camera.sub_stream_url
+            )
+        except Exception as e:
+            logger.error(f"Failed to register '{camera.name}' in Go2RTC: {e}")
+    
+    # Sync Frigate config once at the end
+    if created_cameras:
+        background_tasks.add_task(sync_all_to_frigate)
+    
+    logger.info(f"Bulk import: {len(created_cameras)} created, {len(errors)} failed")
+    
+    return CameraBulkResponse(
+        created=len(created_cameras),
+        failed=len(errors),
+        errors=errors,
+        cameras=created_cameras
+    )
+
+
+@router.get("/groups/list")
+async def get_camera_groups(db: AsyncSession = Depends(get_db)):
+    """
+    Get list of unique camera groups.
+    """
+    result = await db.execute(
+        select(Camera.group).where(Camera.group.isnot(None)).distinct()
+    )
+    groups = [row[0] for row in result.fetchall() if row[0]]
+    return {"groups": sorted(groups)}
 
 
 @router.patch("/{camera_id}", response_model=CameraResponse)
@@ -207,6 +311,66 @@ async def delete_camera(
     background_tasks.add_task(sync_all_to_frigate)
     
     return None
+
+
+@router.post("/bulk-delete", response_model=CameraBulkDeleteResponse)
+async def bulk_delete_cameras(
+    request: CameraBulkDelete,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete multiple cameras in a single operation.
+    
+    Removes cameras from database, unregisters streams from Go2RTC,
+    and regenerates Frigate config once at the end.
+    """
+    deleted = 0
+    failed = 0
+    errors = []
+    
+    for camera_id in request.camera_ids:
+        try:
+            # Get camera
+            result = await db.execute(
+                select(Camera).where(Camera.id == camera_id)
+            )
+            camera = result.scalar_one_or_none()
+            
+            if not camera:
+                failed += 1
+                errors.append(f"Camera ID {camera_id} not found")
+                continue
+            
+            camera_name = camera.name
+            
+            # Delete from database
+            await db.delete(camera)
+            
+            # Remove from Go2RTC
+            try:
+                await stream_manager.unregister_stream(camera_name)
+                logger.info(f"Bulk delete: removed '{camera_name}' from Go2RTC")
+            except Exception as e:
+                logger.error(f"Bulk delete: failed to remove '{camera_name}' from Go2RTC: {e}")
+            
+            deleted += 1
+            logger.info(f"Bulk delete: camera '{camera_name}' (ID: {camera_id}) deleted")
+            
+        except Exception as e:
+            failed += 1
+            errors.append(f"Error deleting camera {camera_id}: {str(e)}")
+            logger.error(f"Bulk delete error for camera {camera_id}: {e}")
+    
+    # Commit all deletions
+    await db.commit()
+    
+    # Sync Frigate config ONCE at the end (not per camera)
+    if deleted > 0:
+        background_tasks.add_task(sync_all_to_frigate)
+    
+    logger.info(f"Bulk delete completed: {deleted} deleted, {failed} failed")
+    return CameraBulkDeleteResponse(deleted=deleted, failed=failed, errors=errors)
 
 
 # ============================================================

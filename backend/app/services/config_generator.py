@@ -1,6 +1,6 @@
 """
 TitanNVR - Configuration Generator Service
-Dynamically generates Frigate configuration based on cameras in the database
+Enterprise v2.0 - Dynamic Frigate configuration with intelligent recording modes
 """
 import yaml
 import httpx
@@ -12,10 +12,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Configuration paths
-# Note: Backend mounts ./config as sibling to ./backend, accessible via /app/../config
 FRIGATE_CONFIG_PATH = os.getenv("FRIGATE_CONFIG_PATH", "/config/frigate.yml")
 FRIGATE_API_URL = os.getenv("FRIGATE_URL", "http://frigate:5000")
 GO2RTC_RTSP_URL = "rtsp://go2rtc:8554"
+
+# Recording mode mapping to Frigate retain mode
+RECORDING_MODE_MAP = {
+    "continuous": "all",           # Record 24/7, maximum storage usage
+    "motion": "motion",            # Record only when motion detected
+    "events": "active_objects"     # Record only on AI detection (max space saving)
+}
 
 
 class FrigateConfigGenerator:
@@ -105,21 +111,40 @@ class FrigateConfigGenerator:
     def _generate_camera_config(
         self, 
         name: str,
+        retention_days: int = 7,
+        recording_mode: str = "motion",
+        event_retention_days: int = 14,
         detect_width: int = 1280,
         detect_height: int = 720,
         detect_fps: int = 5,
-        objects: List[str] = None
+        objects: List[str] = None,
+        zones_config: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """
         Generate camera configuration for Frigate.
         
-        Uses Go2RTC RTSP proxy for efficient streaming:
-        - Sub stream for detection (lower resolution, less CPU)
-        - Main stream for recording (full quality)
+        Enterprise v2.0 Features:
+        - Dynamic retention days from database
+        - Intelligent recording modes (continuous/motion/events)
+        - Zone configuration support
+        
+        Recording Modes:
+        - continuous: 24/7 recording (mode: all) - Maximum storage
+        - motion: Motion-triggered recording - Balanced
+        - events: AI detection only (mode: active_objects) - Minimum storage
         """
         normalized_name = self._normalize_name(name)
         
-        return {
+        # Map recording mode to Frigate retain mode
+        frigate_retain_mode = RECORDING_MODE_MAP.get(recording_mode, "motion")
+        
+        logger.info(
+            f"Camera {name}: retention={retention_days}d, "
+            f"mode={recording_mode}→{frigate_retain_mode}, "
+            f"event_retention={event_retention_days}d"
+        )
+        
+        config = {
             "enabled": True,
             "ffmpeg": {
                 "inputs": [
@@ -144,32 +169,45 @@ class FrigateConfigGenerator:
             "record": {
                 "enabled": True,
                 "retain": {
-                    "days": 3,
-                    "mode": "motion"  # Record only motion to save space
+                    "days": retention_days,
+                    "mode": frigate_retain_mode
                 },
                 "events": {
                     "retain": {
-                        "default": 10  # Keep event clips for 10 days
+                        "default": event_retention_days,
+                        "mode": "active_objects"
                     }
                 }
             },
             "snapshots": {
                 "enabled": True,
                 "retain": {
-                    "default": 10
+                    "default": event_retention_days
                 }
             },
             "objects": {
                 "track": objects or ["person"]
             }
         }
+        
+        # Add zones if configured
+        if zones_config:
+            config["zones"] = zones_config
+        
+        return config
     
     def generate_config(self, cameras: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Generate complete Frigate configuration.
         
+        Enterprise v2.0: Uses per-camera settings from database:
+        - retention_days: Days to keep recordings
+        - recording_mode: continuous | motion | events
+        - event_retention_days: Days to keep event clips
+        - zones_config: Detection zones
+        
         Args:
-            cameras: List of camera dictionaries with 'name', 'is_active' fields
+            cameras: List of camera dictionaries from database
             
         Returns:
             Complete Frigate configuration dictionary
@@ -190,13 +228,22 @@ class FrigateConfigGenerator:
             
             normalized_name = self._normalize_name(name)
             
-            # Add camera to Frigate config
+            # Get recording mode value (handle enum or string)
+            recording_mode = camera.get("recording_mode", "motion")
+            if hasattr(recording_mode, 'value'):
+                recording_mode = recording_mode.value
+            
+            # Add camera to Frigate config with enterprise settings
             config["cameras"][normalized_name] = self._generate_camera_config(
                 name=name,
+                retention_days=camera.get("retention_days", 7),
+                recording_mode=recording_mode,
+                event_retention_days=camera.get("event_retention_days", 14),
                 detect_width=camera.get("detect_width", 1280),
                 detect_height=camera.get("detect_height", 720),
                 detect_fps=camera.get("detect_fps", 5),
-                objects=camera.get("objects", ["person"])
+                objects=camera.get("objects", ["person"]),
+                zones_config=camera.get("zones_config")
             )
             
             # Add to Go2RTC streams for WebRTC playback

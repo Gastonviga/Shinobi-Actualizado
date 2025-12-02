@@ -1,12 +1,16 @@
 """
 TitanNVR - Events Router
-Handles AI detection events from Frigate
+Enterprise v2.0 - AI detection events with email notifications
 """
-from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi import APIRouter, Request, BackgroundTasks, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import logging
+
+from app.database import get_db
+from app.services.notification import send_detection_notification
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +81,20 @@ def store_event(event: Dict[str, Any]):
 # ============================================================
 
 @router.post("/frigate")
-async def receive_frigate_event(request: Request, background_tasks: BackgroundTasks):
+async def receive_frigate_event(
+    request: Request, 
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Receive webhook events from Frigate NVR.
+    
+    Enterprise v2.0: Sends email notifications for confirmed detections.
     
     Frigate sends events when objects are detected:
     - type: "new" - New object detected
     - type: "update" - Object tracking updated  
-    - type: "end" - Object left the scene
+    - type: "end" - Object left the scene (triggers notification)
     """
     try:
         payload = await request.json()
@@ -113,6 +123,19 @@ async def receive_frigate_event(request: Request, background_tasks: BackgroundTa
                 f"✓ Evento finalizado: {label} en '{camera}' - "
                 f"duración: {duration:.1f}s"
             )
+            
+            # Send email notification for confirmed detections (on event end)
+            # Only notify for high-confidence detections (>70%)
+            if top_score >= 0.7 and label in ["person", "car", "dog", "cat"]:
+                background_tasks.add_task(
+                    send_detection_notification,
+                    db,
+                    camera,
+                    label,
+                    top_score,
+                    datetime.utcnow()
+                )
+                logger.info(f"📧 Email notification queued for {label} on {camera}")
         
         # Store event
         event_record = {
@@ -127,9 +150,6 @@ async def receive_frigate_event(request: Request, background_tasks: BackgroundTa
             "has_clip": after.get("has_clip", False),
         }
         store_event(event_record)
-        
-        # TODO: Add background task for notifications (email, push, etc.)
-        # background_tasks.add_task(send_notification, event_record)
         
         return {
             "status": "received",

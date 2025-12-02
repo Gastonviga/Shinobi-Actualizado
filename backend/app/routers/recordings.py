@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 import logging
 
@@ -197,6 +198,119 @@ async def play_recording(file_path: str):
         media_type="video/mp4",
         filename=full_path.name
     )
+
+
+@router.delete("/{file_path:path}")
+async def delete_recording(file_path: str):
+    """
+    Delete a recording file from disk.
+    
+    Args:
+        file_path: Relative path to the recording file
+        
+    Returns:
+        Success message or error
+    """
+    # Try recordings directory
+    full_path = RECORDINGS_BASE_PATH / file_path
+    
+    if not full_path.exists():
+        # Try clips directory
+        full_path = CLIPS_BASE_PATH / file_path
+    
+    if not full_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Recording not found: {file_path}"
+        )
+    
+    # Security check - ensure path is within allowed directories
+    try:
+        full_path.resolve().relative_to(RECORDINGS_BASE_PATH.resolve())
+    except ValueError:
+        try:
+            full_path.resolve().relative_to(CLIPS_BASE_PATH.resolve())
+        except ValueError:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied - path outside allowed directories"
+            )
+    
+    try:
+        full_path.unlink()
+        logger.info(f"Deleted recording: {file_path}")
+        return {"status": "ok", "message": f"Recording deleted: {file_path}"}
+    except Exception as e:
+        logger.error(f"Failed to delete recording {file_path}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BulkDeleteRequest(BaseModel):
+    files: List[str]
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted: int
+    errors: int
+    details: List[str] = []
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_recordings(request: BulkDeleteRequest):
+    """
+    Delete multiple recording files in a single operation.
+    
+    Args:
+        request: BulkDeleteRequest with list of file paths
+        
+    Returns:
+        Summary with deleted count and errors
+    """
+    deleted = 0
+    errors = 0
+    details = []
+    
+    for file_path in request.files:
+        # Try recordings directory first
+        full_path = RECORDINGS_BASE_PATH / file_path
+        
+        if not full_path.exists():
+            # Try clips directory
+            full_path = CLIPS_BASE_PATH / file_path
+        
+        if not full_path.exists():
+            errors += 1
+            details.append(f"Not found: {file_path}")
+            continue
+        
+        # Security check - ensure path is within allowed directories
+        is_valid = False
+        try:
+            full_path.resolve().relative_to(RECORDINGS_BASE_PATH.resolve())
+            is_valid = True
+        except ValueError:
+            try:
+                full_path.resolve().relative_to(CLIPS_BASE_PATH.resolve())
+                is_valid = True
+            except ValueError:
+                pass
+        
+        if not is_valid:
+            errors += 1
+            details.append(f"Access denied: {file_path}")
+            continue
+        
+        try:
+            full_path.unlink()
+            deleted += 1
+            logger.info(f"Bulk delete: removed {file_path}")
+        except Exception as e:
+            errors += 1
+            details.append(f"Error deleting {file_path}: {str(e)}")
+            logger.error(f"Bulk delete error for {file_path}: {e}")
+    
+    logger.info(f"Bulk delete completed: {deleted} deleted, {errors} errors")
+    return BulkDeleteResponse(deleted=deleted, errors=errors, details=details)
 
 
 @router.get("/stats")

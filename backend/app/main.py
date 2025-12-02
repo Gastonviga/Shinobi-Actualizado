@@ -1,5 +1,6 @@
 """
 TitanNVR - Main Application Entry Point
+Enterprise v2.0 with Authentication, Notifications, and Advanced Configuration
 """
 import asyncio
 import logging
@@ -14,8 +15,11 @@ from app.models.camera import Camera
 from app.routers import cameras_router, health_router, streams_router
 from app.routers.events import router as events_router
 from app.routers.recordings import router as recordings_router
+from app.routers.auth import router as auth_router
+from app.routers.settings import router as settings_router, init_default_settings
 from app.services.stream_manager import stream_manager
 from app.services.cloud_sync import periodic_cloud_sync
+from app.services.auth import create_default_admin
 
 # Configure logging
 logging.basicConfig(
@@ -70,13 +74,19 @@ async def sync_cameras_to_go2rtc():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler."""
+    """Application lifespan handler - Enterprise v2.0."""
     # Startup
-    logger.info(f"🚀 Starting {settings.app_name}...")
+    logger.info(f"🚀 Starting {settings.app_name} Enterprise v2.0...")
     
     # Initialize database
     await init_db()
     logger.info("✅ Database initialized")
+    
+    # Initialize default admin user and settings
+    async with async_session_maker() as session:
+        await create_default_admin(session)
+        await init_default_settings(session)
+        logger.info("✅ Default admin and settings initialized")
     
     # Sync cameras to Go2RTC
     await sync_cameras_to_go2rtc()
@@ -110,6 +120,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 app.include_router(cameras_router, prefix="/api")
 app.include_router(streams_router, prefix="/api")
 app.include_router(events_router, prefix="/api")

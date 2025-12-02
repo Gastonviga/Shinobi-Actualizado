@@ -6,8 +6,78 @@ log:
 rtsp:
     listen: :8554
 streams:
+    camara_01_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_01_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_02_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_02_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_03_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_03_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_04_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_04_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_05_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_05_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_06_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_06_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_07_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_07_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_08_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_08_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_09_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_09_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_10_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_10_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_11_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_11_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_12_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_12_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_13_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_13_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_14_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_14_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_15_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_15_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_16_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_16_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_17_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_17_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_18_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_18_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_19_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_19_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_20_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_20_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_21_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_21_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_22_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_22_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_23_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_23_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_24_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_24_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_25_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_25_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_26_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_26_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_27_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_27_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_28_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_28_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_29_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_29_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_30_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_30_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_31_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_31_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_32_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    camara_32_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     celular_prueba_main: http://192.168.1.7:8080/video
     celular_prueba_sub: http://192.168.1.7:8080/video
+    estacionamiento_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    estacionamiento_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    pasillo_norte_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    pasillo_norte_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    pasillo_sur_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    pasillo_sur_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
 webrtc:
     candidates:
         - stun:stun.l.google.com:19302

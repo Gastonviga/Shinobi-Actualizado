@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Camera, Loader2 } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Camera, Loader2, HardDrive, Upload, FileJson, CheckCircle, AlertCircle, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createCamera, type CameraCreate } from '@/lib/api'
+import { createCamera, createCamerasBulk, type CameraCreate, type RecordingMode, type BulkCreateResponse } from '@/lib/api'
 
 interface AddCameraDialogProps {
   isOpen: boolean
@@ -19,19 +19,35 @@ interface AddCameraDialogProps {
   onSuccess: () => void
 }
 
-/**
- * AddCameraDialog - Form to add a new camera
- */
+type TabMode = 'manual' | 'import'
+
+const RECORDING_MODES = [
+  { value: 'motion', label: 'Solo Movimiento', desc: 'Graba cuando detecta movimiento (~2-5 GB/día)', color: 'text-yellow-500' },
+  { value: 'events', label: 'Solo Eventos IA', desc: 'Graba solo personas/vehículos (~0.5-2 GB/día)', color: 'text-green-500' },
+  { value: 'continuous', label: 'Continuo 24/7', desc: 'Graba todo el tiempo (~10-15 GB/día)', color: 'text-red-500' },
+]
+
 export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogProps) {
+  const [activeTab, setActiveTab] = useState<TabMode>('manual')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // Manual form state
   const [formData, setFormData] = useState<CameraCreate>({
     name: '',
     main_stream_url: '',
     sub_stream_url: '',
     location: '',
+    group: '',
+    retention_days: 7,
+    recording_mode: 'motion',
+    event_retention_days: 14,
   })
+  
+  // Import state
+  const [importData, setImportData] = useState<CameraCreate[] | null>(null)
+  const [importResult, setImportResult] = useState<BulkCreateResponse | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,111 +91,376 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
     setFormData(prev => ({ ...prev, [field]: e.target.value }))
   }
 
+  // Handle JSON file import
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string)
+        if (!Array.isArray(json)) {
+          throw new Error('El archivo debe contener un array de cámaras')
+        }
+        // Validate each camera has required fields
+        for (const cam of json) {
+          if (!cam.name || !cam.main_stream_url) {
+            throw new Error('Cada cámara debe tener al menos "name" y "main_stream_url"')
+          }
+        }
+        setImportData(json)
+        setError(null)
+        setImportResult(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al parsear JSON')
+        setImportData(null)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  // Handle bulk import
+  const handleBulkImport = async () => {
+    if (!importData) return
+    
+    setIsLoading(true)
+    setError(null)
+    
+    try {
+      const result = await createCamerasBulk(importData)
+      setImportResult(result)
+      
+      if (result.created > 0) {
+        onSuccess()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al importar cámaras')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Reset state when dialog closes
+  const handleClose = () => {
+    setActiveTab('manual')
+    setImportData(null)
+    setImportResult(null)
+    setError(null)
+    onClose()
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]" onClose={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-[850px]" onClose={handleClose}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="w-5 h-5" />
-            Agregar Nueva Cámara
+            Agregar Cámaras
           </DialogTitle>
           <DialogDescription>
-            Ingresa los datos de la cámara IP. Necesitarás las URLs RTSP.
+            Agrega cámaras manualmente o importa múltiples desde un archivo JSON.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {/* Camera Name */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Nombre de la Cámara *</Label>
-            <Input
-              id="name"
-              placeholder="Ej: Entrada Principal"
-              value={formData.name}
-              onChange={handleChange('name')}
-              disabled={isLoading}
-            />
-          </div>
+        {/* Tab Buttons */}
+        <div className="flex gap-2 border-b pb-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('manual')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'manual'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted hover:bg-muted/80'
+            }`}
+          >
+            <Camera className="w-4 h-4" />
+            Manual
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('import')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'import'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted hover:bg-muted/80'
+            }`}
+          >
+            <FileJson className="w-4 h-4" />
+            Importar JSON
+          </button>
+        </div>
 
-          {/* Main Stream URL */}
-          <div className="space-y-2">
-            <Label htmlFor="main_stream_url">
-              URL Stream Principal (HD) *
-            </Label>
-            <Input
-              id="main_stream_url"
-              placeholder="rtsp://usuario:clave@192.168.1.100:554/stream1"
-              value={formData.main_stream_url}
-              onChange={handleChange('main_stream_url')}
-              disabled={isLoading}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              Stream de alta calidad para grabación y vista detallada
-            </p>
-          </div>
+        {/* Manual Tab */}
+        {activeTab === 'manual' && (
+          <form onSubmit={handleSubmit} className="py-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left Column - Camera Info */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Camera className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">Datos de la Cámara</span>
+                </div>
 
-          {/* Sub Stream URL */}
-          <div className="space-y-2">
-            <Label htmlFor="sub_stream_url">
-              URL Stream Secundario (SD)
-            </Label>
-            <Input
-              id="sub_stream_url"
-              placeholder="rtsp://usuario:clave@192.168.1.100:554/stream2"
-              value={formData.sub_stream_url || ''}
-              onChange={handleChange('sub_stream_url')}
-              disabled={isLoading}
-              className="font-mono text-sm"
-            />
-            <p className="text-xs text-muted-foreground">
-              Stream de baja calidad para vista en mosaico. Si no se especifica, se usará el principal.
-            </p>
-          </div>
+                {/* Camera Name */}
+                <div className="space-y-1">
+                  <Label htmlFor="name" className="text-xs">Nombre *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Ej: Entrada Principal"
+                    value={formData.name}
+                    onChange={handleChange('name')}
+                    disabled={isLoading}
+                  />
+                </div>
 
-          {/* Location */}
-          <div className="space-y-2">
-            <Label htmlFor="location">Ubicación</Label>
-            <Input
-              id="location"
-              placeholder="Ej: Edificio A, Piso 1"
-              value={formData.location || ''}
-              onChange={handleChange('location')}
-              disabled={isLoading}
-            />
-          </div>
+                {/* Group */}
+                <div className="space-y-1">
+                  <Label htmlFor="group" className="text-xs">Grupo</Label>
+                  <Input
+                    id="group"
+                    placeholder="Ej: Planta Baja, Exterior"
+                    value={formData.group || ''}
+                    onChange={handleChange('group')}
+                    disabled={isLoading}
+                  />
+                </div>
 
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              {error}
+                {/* Location */}
+                <div className="space-y-1">
+                  <Label htmlFor="location" className="text-xs">Ubicación</Label>
+                  <Input
+                    id="location"
+                    placeholder="Ej: Edificio A, Piso 1"
+                    value={formData.location || ''}
+                    onChange={handleChange('location')}
+                    disabled={isLoading}
+                  />
+                </div>
+
+                {/* Main Stream URL */}
+                <div className="space-y-1">
+                  <Label htmlFor="main_stream_url" className="text-xs">Stream Principal (HD) *</Label>
+                  <Input
+                    id="main_stream_url"
+                    placeholder="rtsp://user:pass@192.168.1.100:554/stream1"
+                    value={formData.main_stream_url}
+                    onChange={handleChange('main_stream_url')}
+                    disabled={isLoading}
+                    className="font-mono text-xs"
+                  />
+                </div>
+
+                {/* Sub Stream URL */}
+                <div className="space-y-1">
+                  <Label htmlFor="sub_stream_url" className="text-xs">Stream Secundario (SD)</Label>
+                  <Input
+                    id="sub_stream_url"
+                    placeholder="rtsp://user:pass@192.168.1.100:554/stream2"
+                    value={formData.sub_stream_url || ''}
+                    onChange={handleChange('sub_stream_url')}
+                    disabled={isLoading}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column - Recording Settings */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <HardDrive className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium text-sm">Configuración de Grabación</span>
+                </div>
+
+                {/* Recording Mode */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Modo de Grabación</Label>
+                  <div className="space-y-1">
+                    {RECORDING_MODES.map((mode) => (
+                      <label
+                        key={mode.value}
+                        className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
+                          formData.recording_mode === mode.value 
+                            ? 'border-primary bg-primary/5' 
+                            : 'border-border hover:bg-muted/50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="recording_mode"
+                          value={mode.value}
+                          checked={formData.recording_mode === mode.value}
+                          onChange={() => setFormData(prev => ({ ...prev, recording_mode: mode.value as RecordingMode }))}
+                          className="w-3 h-3"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">{mode.label}</span>
+                          <span className={`text-[10px] ml-2 ${mode.color}`}>{mode.desc.split('(')[1]?.replace(')', '') || ''}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Retention Days */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="retention_days" className="text-xs">Retención Grab.</Label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        id="retention_days"
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={formData.retention_days}
+                        onChange={(e) => setFormData(prev => ({ ...prev, retention_days: parseInt(e.target.value) || 7 }))}
+                        disabled={isLoading}
+                        className="w-16 h-8 text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground">días</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="event_retention_days" className="text-xs">Retención Eventos</Label>
+                    <div className="flex items-center gap-1">
+                      <Input
+                        id="event_retention_days"
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={formData.event_retention_days}
+                        onChange={(e) => setFormData(prev => ({ ...prev, event_retention_days: parseInt(e.target.value) || 14 }))}
+                        disabled={isLoading}
+                        className="w-16 h-8 text-sm"
+                      />
+                      <span className="text-xs text-muted-foreground">días</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isLoading}
+            {error && (
+              <div className="mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Agregando...</>
+                ) : (
+                  <><Camera className="w-4 h-4 mr-2" />Agregar Cámara</>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+
+        {/* Import Tab */}
+        {activeTab === 'import' && (
+          <div className="py-4 space-y-4">
+            {/* Dropzone */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
             >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Agregando...
-                </>
-              ) : (
-                <>
-                  <Camera className="w-4 h-4 mr-2" />
-                  Agregar Cámara
-                </>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleFileImport}
+                className="hidden"
+              />
+              <Upload className="w-10 h-10 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Haz clic para seleccionar archivo JSON</p>
+              <p className="text-xs text-muted-foreground mt-1">o arrastra y suelta aquí</p>
+            </div>
+
+            {/* Preview */}
+            {importData && !importResult && (
+              <div className="p-4 rounded-lg bg-muted/50 space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <span className="font-medium">Se importarán {importData.length} cámaras</span>
+                </div>
+                <div className="max-h-32 overflow-auto text-xs space-y-1">
+                  {importData.map((cam, i) => (
+                    <div key={i} className="flex items-center gap-2 text-muted-foreground">
+                      <span>•</span>
+                      <span className="font-medium text-foreground">{cam.name}</span>
+                      {cam.group && <span className="text-xs bg-primary/10 px-1.5 rounded">{cam.group}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Import Result */}
+            {importResult && (
+              <div className="p-4 rounded-lg bg-muted/50 space-y-2">
+                <div className="flex items-center gap-2">
+                  {importResult.created > 0 ? (
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  )}
+                  <span className="font-medium">
+                    {importResult.created} cámaras creadas, {importResult.failed} fallidas
+                  </span>
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div className="text-xs text-red-400 space-y-1">
+                    {importResult.errors.map((err, i) => (
+                      <div key={i}>• {err}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* JSON Format Help */}
+            <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
+              <p className="font-medium mb-1">Formato esperado:</p>
+              <pre className="bg-background p-2 rounded text-[10px] overflow-x-auto">
+{`[
+  {
+    "name": "Entrada",
+    "main_stream_url": "rtsp://...",
+    "group": "Planta Baja"
+  }
+]`}
+              </pre>
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+                {importResult ? 'Cerrar' : 'Cancelar'}
+              </Button>
+              {importData && !importResult && (
+                <Button onClick={handleBulkImport} disabled={isLoading}>
+                  {isLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importando...</>
+                  ) : (
+                    <><Upload className="w-4 h-4 mr-2" />Importar {importData.length} Cámaras</>
+                  )}
+                </Button>
               )}
-            </Button>
-          </DialogFooter>
-        </form>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

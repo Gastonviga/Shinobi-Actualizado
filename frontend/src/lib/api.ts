@@ -4,8 +4,6 @@ import axios from 'axios'
 const API_URL = '/api'
 
 // Go2RTC URL for direct stream access from browser
-// In browser, we need to access Go2RTC directly (not through Docker network)
-// Default to localhost:1984 for development
 const GO2RTC_URL = import.meta.env.VITE_GO2RTC_URL || 'http://localhost:1984'
 
 // Log the configured URLs for debugging
@@ -19,9 +17,36 @@ export const api = axios.create({
   },
 })
 
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('titan_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Handle 401 responses
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('titan_token')
+      localStorage.removeItem('titan_user')
+      // Optionally redirect to login
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 // ============================================================
 // Types
 // ============================================================
+
+export type RecordingMode = 'continuous' | 'motion' | 'events'
 
 export interface Camera {
   id: number
@@ -31,6 +56,12 @@ export interface Camera {
   is_recording: boolean
   is_active: boolean
   location: string | null
+  group: string | null
+  // Enterprise recording settings
+  retention_days: number
+  recording_mode: RecordingMode
+  event_retention_days: number
+  zones_config: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -40,6 +71,62 @@ export interface CameraCreate {
   main_stream_url: string
   sub_stream_url?: string | null
   location?: string | null
+  group?: string | null
+  // Enterprise recording settings
+  retention_days?: number
+  recording_mode?: RecordingMode
+  event_retention_days?: number
+}
+
+export interface CameraUpdate {
+  name?: string
+  main_stream_url?: string
+  sub_stream_url?: string | null
+  location?: string | null
+  group?: string | null
+  is_active?: boolean
+  retention_days?: number
+  recording_mode?: RecordingMode
+  event_retention_days?: number
+}
+
+export interface BulkCreateResponse {
+  created: number
+  failed: number
+  errors: string[]
+  cameras: Camera[]
+}
+
+// Auth types
+export interface User {
+  id: number
+  username: string
+  email: string | null
+  role: 'admin' | 'operator' | 'viewer'
+  is_active: boolean
+  receive_email_alerts: boolean
+}
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+  user: User
+}
+
+// Settings types
+export interface PublicSettings {
+  system_title: string
+  theme_color: string
+  logo_url: string | null
+  company_name: string
+}
+
+export interface RecordingModeInfo {
+  mode: string
+  name: string
+  description: string
+  storage_impact: string
 }
 
 export interface HealthStatus {
@@ -93,6 +180,66 @@ export const forceSync = async (): Promise<{ status: string; synced: number; fai
 }
 
 // ============================================================
+// Authentication API
+// ============================================================
+
+export const login = async (username: string, password: string): Promise<LoginResponse> => {
+  const formData = new URLSearchParams()
+  formData.append('username', username)
+  formData.append('password', password)
+  
+  const response = await api.post<LoginResponse>('/auth/login', formData, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  })
+  
+  // Store token and user
+  localStorage.setItem('titan_token', response.data.access_token)
+  localStorage.setItem('titan_user', JSON.stringify(response.data.user))
+  
+  return response.data
+}
+
+export const logout = (): void => {
+  localStorage.removeItem('titan_token')
+  localStorage.removeItem('titan_user')
+}
+
+export const getCurrentUser = async (): Promise<User> => {
+  const response = await api.get<User>('/auth/me')
+  return response.data
+}
+
+export const getStoredUser = (): User | null => {
+  const userStr = localStorage.getItem('titan_user')
+  if (userStr) {
+    try {
+      return JSON.parse(userStr)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+export const isAuthenticated = (): boolean => {
+  return !!localStorage.getItem('titan_token')
+}
+
+// ============================================================
+// Settings API
+// ============================================================
+
+export const getPublicSettings = async (): Promise<PublicSettings> => {
+  const response = await api.get<PublicSettings>('/settings/public')
+  return response.data
+}
+
+export const getRecordingModesInfo = async (): Promise<{ modes: RecordingModeInfo[], default: string }> => {
+  const response = await api.get('/cameras/recording-modes/info')
+  return response.data
+}
+
+// ============================================================
 // Camera CRUD API
 // ============================================================
 
@@ -118,6 +265,64 @@ export const updateCamera = async (id: number, camera: Partial<Camera>): Promise
 
 export const deleteCamera = async (id: number): Promise<void> => {
   await api.delete(`/cameras/${id}`)
+}
+
+export const createCamerasBulk = async (cameras: CameraCreate[]): Promise<BulkCreateResponse> => {
+  const response = await api.post<BulkCreateResponse>('/cameras/bulk', { cameras })
+  return response.data
+}
+
+export const getCameraGroups = async (): Promise<{ groups: string[] }> => {
+  const response = await api.get<{ groups: string[] }>('/cameras/groups/list')
+  return response.data
+}
+
+export interface BulkDeleteCamerasResponse {
+  deleted: number
+  failed: number
+  errors: string[]
+}
+
+export const bulkDeleteCameras = async (cameraIds: number[]): Promise<BulkDeleteCamerasResponse> => {
+  const response = await api.post<BulkDeleteCamerasResponse>('/cameras/bulk-delete', { camera_ids: cameraIds })
+  return response.data
+}
+
+// ============================================================
+// Recordings API
+// ============================================================
+
+export interface Recording {
+  camera: string
+  name: string
+  path: string
+  size: number
+  size_mb: number
+  created: string
+  modified: string
+}
+
+export const getRecordings = async (camera?: string, date?: string): Promise<{ recordings: Recording[], total: number }> => {
+  const params = new URLSearchParams()
+  if (camera) params.append('camera', camera)
+  if (date) params.append('date', date)
+  const response = await api.get(`/recordings/?${params.toString()}`)
+  return response.data
+}
+
+export const deleteRecording = async (filePath: string): Promise<void> => {
+  await api.delete(`/recordings/${filePath}`)
+}
+
+export interface BulkDeleteResponse {
+  deleted: number
+  errors: number
+  details: string[]
+}
+
+export const bulkDeleteRecordings = async (files: string[]): Promise<BulkDeleteResponse> => {
+  const response = await api.post<BulkDeleteResponse>('/recordings/bulk-delete', { files })
+  return response.data
 }
 
 // ============================================================

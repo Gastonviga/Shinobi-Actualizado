@@ -1,0 +1,280 @@
+"""
+TitanNVR - Authentication Router
+Enterprise JWT authentication endpoints
+"""
+from datetime import timedelta
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel, EmailStr
+import logging
+
+from app.database import get_db
+from app.models.user import User, UserRole
+from app.services.auth import (
+    AuthService,
+    get_current_user_required,
+    require_admin,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+# ============================================================
+# Schemas
+# ============================================================
+
+class UserResponse(BaseModel):
+    """User response without sensitive data."""
+    id: int
+    username: str
+    email: Optional[str]
+    role: str
+    is_active: bool
+    receive_email_alerts: bool
+    
+    class Config:
+        from_attributes = True
+
+
+class Token(BaseModel):
+    """JWT token response."""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserResponse
+
+
+class UserCreate(BaseModel):
+    """Schema for creating new users."""
+    username: str
+    password: str
+    email: Optional[EmailStr] = None
+    role: UserRole = UserRole.VIEWER
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating users."""
+    email: Optional[EmailStr] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    receive_email_alerts: Optional[bool] = None
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password."""
+    current_password: str
+    new_password: str
+
+
+# ============================================================
+# Authentication Endpoints
+# ============================================================
+
+@router.post("/login", response_model=Token)
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Authenticate user and return JWT token.
+    
+    Use form data with 'username' and 'password' fields.
+    """
+    user = await AuthService.authenticate_user(
+        db, form_data.username, form_data.password
+    )
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = AuthService.create_access_token(
+        data={"sub": str(user.id), "role": user.role.value}
+    )
+    
+    return Token(
+        access_token=access_token,
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=UserResponse(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            role=user.role.value,
+            is_active=user.is_active,
+            receive_email_alerts=user.receive_email_alerts
+        )
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user_required)
+):
+    """Get current authenticated user information."""
+    return UserResponse(
+        id=current_user.id,
+        username=current_user.username,
+        email=current_user.email,
+        role=current_user.role.value,
+        is_active=current_user.is_active,
+        receive_email_alerts=current_user.receive_email_alerts
+    )
+
+
+@router.post("/change-password")
+async def change_password(
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db)
+):
+    """Change current user's password."""
+    if not AuthService.verify_password(
+        password_data.current_password, 
+        current_user.hashed_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    current_user.hashed_password = AuthService.get_password_hash(
+        password_data.new_password
+    )
+    await db.commit()
+    
+    return {"message": "Password changed successfully"}
+
+
+# ============================================================
+# User Management (Admin only)
+# ============================================================
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all users (admin only)."""
+    result = await db.execute(select(User).order_by(User.username))
+    users = result.scalars().all()
+    
+    return [
+        UserResponse(
+            id=u.id,
+            username=u.username,
+            email=u.email,
+            role=u.role.value,
+            is_active=u.is_active,
+            receive_email_alerts=u.receive_email_alerts
+        ) for u in users
+    ]
+
+
+@router.post("/users", response_model=UserResponse)
+async def create_user(
+    user_data: UserCreate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new user (admin only)."""
+    # Check if username exists
+    result = await db.execute(
+        select(User).where(User.username == user_data.username)
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    
+    user = await AuthService.create_user(
+        db,
+        username=user_data.username,
+        password=user_data.password,
+        email=user_data.email,
+        role=user_data.role
+    )
+    
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role=user.role.value,
+        is_active=user.is_active,
+        receive_email_alerts=user.receive_email_alerts
+    )
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a user (admin only)."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    if user_data.email is not None:
+        user.email = user_data.email
+    if user_data.role is not None:
+        user.role = user_data.role
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
+    if user_data.receive_email_alerts is not None:
+        user.receive_email_alerts = user_data.receive_email_alerts
+    
+    await db.commit()
+    await db.refresh(user)
+    
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role=user.role.value,
+        is_active=user.is_active,
+        receive_email_alerts=user.receive_email_alerts
+    )
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a user (admin only)."""
+    if admin.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    await db.delete(user)
+    await db.commit()
+    
+    return {"message": f"User {user.username} deleted"}
