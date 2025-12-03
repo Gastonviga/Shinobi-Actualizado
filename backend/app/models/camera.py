@@ -3,8 +3,8 @@ TitanNVR - Camera Model
 Enterprise v2.0 with advanced recording configuration
 """
 import enum
-from sqlalchemy import String, Boolean, DateTime, Integer, Enum, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Boolean, DateTime, Integer, Enum, Text, Float, ForeignKey, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.sqlite import JSON
 from datetime import datetime
 from typing import Optional
@@ -71,6 +71,18 @@ class Camera(Base):
     
     # Event retention (separate from continuous recordings)
     event_retention_days: Mapped[int] = mapped_column(Integer, default=14, nullable=False)
+    
+    # Map positioning (Enterprise E-Maps feature)
+    map_id: Mapped[Optional[int]] = mapped_column(
+        Integer, 
+        ForeignKey("maps.id", ondelete="SET NULL"), 
+        nullable=True
+    )
+    map_x: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # X position as percentage (0-100)
+    map_y: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # Y position as percentage (0-100)
+    
+    # PTZ capability flag
+    features_ptz: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

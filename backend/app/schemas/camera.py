@@ -34,6 +34,8 @@ class CameraCreate(CameraBase):
     )
     event_retention_days: int = Field(default=14, ge=1, le=365, description="Days to keep event clips")
     zones_config: Optional[Dict[str, Any]] = None
+    # PTZ capability
+    features_ptz: bool = Field(default=False, description="Camera has PTZ capability")
 
 
 class CameraUpdate(BaseModel):
@@ -50,6 +52,12 @@ class CameraUpdate(BaseModel):
     recording_mode: Optional[RecordingModeEnum] = None
     event_retention_days: Optional[int] = Field(default=None, ge=1, le=365)
     zones_config: Optional[Dict[str, Any]] = None
+    # PTZ capability
+    features_ptz: Optional[bool] = None
+    # Map positioning
+    map_id: Optional[int] = None
+    map_x: Optional[float] = Field(default=None, ge=0, le=100, description="X position as percentage")
+    map_y: Optional[float] = Field(default=None, ge=0, le=100, description="Y position as percentage")
 
 
 class CameraResponse(CameraBase):
@@ -63,11 +71,24 @@ class CameraResponse(CameraBase):
     recording_mode: str
     event_retention_days: int
     zones_config: Optional[Dict[str, Any]] = None
+    # PTZ capability
+    features_ptz: bool = False
+    # Map positioning
+    map_id: Optional[int] = None
+    map_x: Optional[float] = None
+    map_y: Optional[float] = None
     # Timestamps
     created_at: datetime
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class CameraPositionUpdate(BaseModel):
+    """Schema for updating camera position on map."""
+    map_id: int = Field(..., description="Map ID where camera is positioned")
+    map_x: float = Field(..., ge=0, le=100, description="X position as percentage (0-100)")
+    map_y: float = Field(..., ge=0, le=100, description="Y position as percentage (0-100)")
 
 
 class CameraBulkCreate(BaseModel):

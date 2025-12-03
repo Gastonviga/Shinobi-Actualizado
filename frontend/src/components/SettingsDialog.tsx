@@ -14,7 +14,8 @@ import {
   Image,
   X,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from 'lucide-react'
 import {
   Dialog,
@@ -26,6 +27,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, type User } from '@/lib/api'
+import { AuditPanel } from '@/components/AuditPanel'
+import { useAuth } from '@/contexts/AuthContext'
 
 const MAX_LOGO_SIZE = 2 * 1024 * 1024 // 2MB
 
@@ -54,7 +57,9 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
-  const [activeTab, setActiveTab] = useState<'branding' | 'users'>('branding')
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'audit'>('branding')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -219,7 +224,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] bg-zinc-900 border-zinc-800 p-0">
+      <DialogContent className={`bg-zinc-900 border-zinc-800 p-0 ${activeTab === 'audit' ? 'sm:max-w-[900px]' : 'sm:max-w-[600px]'}`}>
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
             <Settings className="w-5 h-5" />
@@ -251,6 +256,19 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <Users className="w-4 h-4" />
             Usuarios
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('audit')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'audit' 
+                  ? 'text-blue-400 border-b-2 border-blue-400' 
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              Auditoría
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -373,7 +391,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 )}
               </Button>
             </div>
-          ) : (
+          ) : activeTab === 'users' ? (
             <div className="space-y-4">
               {/* User List */}
               <div className="space-y-2">
@@ -467,6 +485,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 </Button>
               )}
             </div>
+          ) : (
+            /* Audit Tab */
+            <AuditPanel isAdmin={isAdmin} />
           )}
         </div>
       </DialogContent>

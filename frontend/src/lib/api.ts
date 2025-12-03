@@ -1,7 +1,8 @@
 import axios from 'axios'
 
-// Use relative URL when proxy is configured, fallback to env var
-const API_URL = '/api'
+// API URL - use localhost:8000 for browser access (backend is exposed on this port)
+// In Docker, the browser can't resolve 'backend:8000', so we use localhost
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 // Go2RTC URL for direct stream access from browser
 const GO2RTC_URL = import.meta.env.VITE_GO2RTC_URL || 'http://localhost:1984'
@@ -62,6 +63,12 @@ export interface Camera {
   recording_mode: RecordingMode
   event_retention_days: number
   zones_config: Record<string, unknown> | null
+  // PTZ capability
+  features_ptz: boolean
+  // Map positioning
+  map_id: number | null
+  map_x: number | null
+  map_y: number | null
   created_at: string
   updated_at: string
 }
@@ -393,3 +400,271 @@ export const getGo2RTCSnapshotUrl = (cameraName: string, quality: 'main' | 'sub'
 }
 
 export { GO2RTC_URL }
+
+// ============================================================
+// Maps API (Enterprise E-Maps)
+// ============================================================
+
+export interface MapInfo {
+  id: number
+  name: string
+  description: string | null
+  image_path: string
+  image_url: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MapCameraInfo {
+  id: number
+  name: string
+  map_x: number
+  map_y: number
+  is_recording: boolean
+  is_active: boolean
+  features_ptz: boolean
+  has_alert: boolean
+}
+
+export interface MapWithCameras extends MapInfo {
+  cameras: MapCameraInfo[]
+}
+
+export const getMaps = async (): Promise<MapInfo[]> => {
+  const response = await api.get<MapInfo[]>('/maps/')
+  return response.data
+}
+
+export const getMap = async (id: number): Promise<MapWithCameras> => {
+  const response = await api.get<MapWithCameras>(`/maps/${id}`)
+  return response.data
+}
+
+export const createMap = async (name: string, description: string | null, image: File): Promise<MapInfo> => {
+  const formData = new FormData()
+  formData.append('name', name)
+  if (description) formData.append('description', description)
+  formData.append('image', image)
+  
+  const response = await api.post<MapInfo>('/maps/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+  return response.data
+}
+
+export const updateMap = async (id: number, data: { name?: string; description?: string }): Promise<MapInfo> => {
+  const response = await api.patch<MapInfo>(`/maps/${id}`, data)
+  return response.data
+}
+
+export const deleteMap = async (id: number): Promise<void> => {
+  await api.delete(`/maps/${id}`)
+}
+
+export const updateCameraPosition = async (
+  cameraId: number, 
+  mapId: number, 
+  x: number, 
+  y: number
+): Promise<Camera> => {
+  const response = await api.patch<Camera>(`/maps/cameras/${cameraId}/position`, {
+    map_id: mapId,
+    map_x: x,
+    map_y: y
+  })
+  return response.data
+}
+
+export const removeCameraFromMap = async (cameraId: number): Promise<void> => {
+  await api.delete(`/maps/cameras/${cameraId}/position`)
+}
+
+export const getUnpositionedCameras = async (): Promise<Camera[]> => {
+  const response = await api.get<Camera[]>('/maps/cameras/unpositioned')
+  return response.data
+}
+
+// ============================================================
+// PTZ Control API
+// ============================================================
+
+export type PTZAction = 'move_up' | 'move_down' | 'move_left' | 'move_right' | 'zoom_in' | 'zoom_out' | 'stop'
+
+export interface PTZResponse {
+  success: boolean
+  message: string
+  camera_name: string
+}
+
+export interface PTZStatus {
+  camera_id: number
+  camera_name: string
+  ptz_enabled: boolean
+  available_actions: PTZAction[]
+}
+
+export const sendPTZCommand = async (
+  cameraId: number, 
+  action: PTZAction, 
+  speed: number = 0.5
+): Promise<PTZResponse> => {
+  const response = await api.post<PTZResponse>(`/cameras/${cameraId}/ptz`, {
+    action,
+    speed
+  })
+  return response.data
+}
+
+export const gotoPTZPreset = async (cameraId: number, presetId: number): Promise<PTZResponse> => {
+  const response = await api.post<PTZResponse>(`/cameras/${cameraId}/ptz/preset/${presetId}`)
+  return response.data
+}
+
+export const getPTZStatus = async (cameraId: number): Promise<PTZStatus> => {
+  const response = await api.get<PTZStatus>(`/cameras/${cameraId}/ptz/status`)
+  return response.data
+}
+
+// ============================================================
+// Timeline & Events API (Evidence Management)
+// ============================================================
+
+export interface TimelineEvent {
+  id: string
+  start_time: string
+  end_time: string | null
+  label: string
+  score: number
+  has_clip: boolean
+  start_timestamp: number
+  end_timestamp: number | null
+  color: string
+}
+
+export interface EventTimeline {
+  camera: string
+  start: string
+  end: string
+  events: TimelineEvent[]
+  total_count: number
+}
+
+export interface EventDetail {
+  id: string
+  camera: string
+  label: string
+  score: number
+  start_time: string
+  end_time: string | null
+  has_clip: boolean
+  has_snapshot: boolean
+  zones: string | null
+  thumbnail_path: string | null
+  created_at: string
+  duration_seconds: number | null
+}
+
+export const getEventTimeline = async (
+  cameraName: string,
+  start?: string,
+  end?: string
+): Promise<EventTimeline> => {
+  const params = new URLSearchParams({ camera_name: cameraName })
+  if (start) params.append('start', start)
+  if (end) params.append('end', end)
+  
+  const response = await api.get<EventTimeline>(`/events/timeline?${params.toString()}`)
+  return response.data
+}
+
+export const getEventDetail = async (eventId: string): Promise<EventDetail> => {
+  const response = await api.get<EventDetail>(`/events/db/${eventId}`)
+  return response.data
+}
+
+export const getEventsFromDB = async (params: {
+  camera?: string
+  label?: string
+  min_score?: number
+  start_time?: string
+  end_time?: string
+  has_clip?: boolean
+  limit?: number
+  offset?: number
+}): Promise<EventDetail[]> => {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) searchParams.append(key, String(value))
+  })
+  
+  const response = await api.get<EventDetail[]>(`/events/db?${searchParams.toString()}`)
+  return response.data
+}
+
+// ============================================================
+// Audit Log API (Compliance)
+// ============================================================
+
+export interface AuditLog {
+  id: number
+  user_id: number | null
+  username: string
+  action: string
+  details: string | null
+  ip_address: string | null
+  user_agent: string | null
+  resource_type: string | null
+  resource_id: string | null
+  timestamp: string
+}
+
+export interface AuditLogList {
+  items: AuditLog[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface AuditStats {
+  total_logs: number
+  logs_today: number
+  unique_users: number
+  actions_breakdown: Record<string, number>
+  period_start: string
+  period_end: string
+}
+
+export interface AuditActionType {
+  code: string
+  label: string
+  category: string
+}
+
+export const getAuditLogs = async (params: {
+  username?: string
+  action?: string
+  resource_type?: string
+  start_time?: string
+  end_time?: string
+  page?: number
+  page_size?: number
+}): Promise<AuditLogList> => {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) searchParams.append(key, String(value))
+  })
+  
+  const response = await api.get<AuditLogList>(`/audit?${searchParams.toString()}`)
+  return response.data
+}
+
+export const getAuditStats = async (days: number = 7): Promise<AuditStats> => {
+  const response = await api.get<AuditStats>(`/audit/stats?days=${days}`)
+  return response.data
+}
+
+export const getAuditActionTypes = async (): Promise<{ actions: AuditActionType[] }> => {
+  const response = await api.get<{ actions: AuditActionType[] }>('/audit/actions')
+  return response.data
+}

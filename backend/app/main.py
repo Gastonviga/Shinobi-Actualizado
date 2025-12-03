@@ -12,11 +12,15 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.database import init_db, async_session_maker
 from app.models.camera import Camera
-from app.routers import cameras_router, health_router, streams_router
+from app.models.map import Map
+from app.models.event import Event
+from app.models.audit import AuditLog
+from app.routers import cameras_router, health_router, streams_router, maps_router, ptz_router
 from app.routers.events import router as events_router
 from app.routers.recordings import router as recordings_router
 from app.routers.auth import router as auth_router
 from app.routers.settings import router as settings_router, init_default_settings
+from app.routers.audit import router as audit_router
 from app.services.stream_manager import stream_manager
 from app.services.cloud_sync import periodic_cloud_sync
 from app.services.auth import create_default_admin
@@ -126,6 +130,9 @@ app.include_router(cameras_router, prefix="/api")
 app.include_router(streams_router, prefix="/api")
 app.include_router(events_router, prefix="/api")
 app.include_router(recordings_router, prefix="/api")
+app.include_router(maps_router, prefix="/api")
+app.include_router(ptz_router, prefix="/api")
+app.include_router(audit_router, prefix="/api")
 
 
 @app.get("/")

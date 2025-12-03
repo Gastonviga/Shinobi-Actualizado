@@ -1,10 +1,10 @@
 """
 TitanNVR - Authentication Router
-Enterprise JWT authentication endpoints
+Enterprise JWT authentication endpoints with audit logging
 """
 from datetime import timedelta
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -13,6 +13,8 @@ import logging
 
 from app.database import get_db
 from app.models.user import User, UserRole
+from app.models.audit import AuditAction
+from app.routers.audit import log_action
 from app.services.auth import (
     AuthService,
     get_current_user_required,
@@ -77,6 +79,7 @@ class PasswordChange(BaseModel):
 
 @router.post("/login", response_model=Token)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
@@ -90,11 +93,30 @@ async def login(
     )
     
     if not user:
+        # Log failed login attempt
+        await log_action(
+            db=db,
+            user=None,
+            action=AuditAction.LOGIN_FAILED,
+            details=f"Failed login attempt for username: {form_data.username}",
+            request=request
+        )
+        await db.commit()
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    # Log successful login
+    await log_action(
+        db=db,
+        user=user,
+        action=AuditAction.LOGIN,
+        details=f"User '{user.username}' logged in successfully",
+        request=request
+    )
     
     access_token = AuthService.create_access_token(
         data={"sub": str(user.id), "role": user.role.value}
@@ -180,6 +202,7 @@ async def list_users(
 
 @router.post("/users", response_model=UserResponse)
 async def create_user(
+    request: Request,
     user_data: UserCreate,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -201,6 +224,17 @@ async def create_user(
         password=user_data.password,
         email=user_data.email,
         role=user_data.role
+    )
+    
+    # Log user creation
+    await log_action(
+        db=db,
+        user=admin,
+        action=AuditAction.USER_CREATE,
+        details=f"Created user '{user.username}' with role '{user.role.value}'",
+        request=request,
+        resource_type="user",
+        resource_id=str(user.id)
     )
     
     return UserResponse(
@@ -254,6 +288,7 @@ async def update_user(
 
 @router.delete("/users/{user_id}")
 async def delete_user(
+    request: Request,
     user_id: int,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -274,7 +309,21 @@ async def delete_user(
             detail="User not found"
         )
     
+    username = user.username  # Save before deletion
+    
     await db.delete(user)
+    
+    # Log user deletion
+    await log_action(
+        db=db,
+        user=admin,
+        action=AuditAction.USER_DELETE,
+        details=f"Deleted user '{username}'",
+        request=request,
+        resource_type="user",
+        resource_id=str(user_id)
+    )
+    
     await db.commit()
     
-    return {"message": f"User {user.username} deleted"}
+    return {"message": f"User {username} deleted"}

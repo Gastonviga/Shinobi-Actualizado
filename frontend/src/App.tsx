@@ -9,7 +9,8 @@ import {
   Loader2,
   Shield,
   UserCog,
-  Eye
+  Eye,
+  Map
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SmartCameraCard } from '@/components/SmartCameraCard'
@@ -17,6 +18,7 @@ import { AddCameraDialog } from '@/components/AddCameraDialog'
 import { EditCameraDialog } from '@/components/EditCameraDialog'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { RecordingsView } from '@/components/RecordingsView'
+import { MapsView } from '@/components/MapsView'
 import { LoginPage } from '@/components/LoginPage'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { 
@@ -40,7 +42,7 @@ function Dashboard() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [editingCamera, setEditingCamera] = useState<CameraType | null>(null)
   const [cameraStatuses, setCameraStatuses] = useState<Record<number, ConnectionStatus>>({})
-  const [activeView, setActiveView] = useState<'cameras' | 'recordings'>('cameras')
+  const [activeView, setActiveView] = useState<'cameras' | 'recordings' | 'maps'>('cameras')
   
   // Filter and pagination state
   const [groups, setGroups] = useState<string[]>([])
@@ -208,6 +210,17 @@ function Dashboard() {
                 <Film className="h-4 w-4 inline mr-1.5" />
                 Grabaciones
               </button>
+              <button
+                onClick={() => setActiveView('maps')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'maps' 
+                    ? 'bg-zinc-800 text-zinc-100' 
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Map className="h-4 w-4 inline mr-1.5" />
+                Mapa
+              </button>
             </nav>
           </div>
           
@@ -264,6 +277,8 @@ function Dashboard() {
       <main className="flex-1 p-2">
         {activeView === 'recordings' ? (
           <RecordingsView />
+        ) : activeView === 'maps' ? (
+          <MapsView />
         ) : (
           <>
             {/* Empty State */}
