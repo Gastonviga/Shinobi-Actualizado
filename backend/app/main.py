@@ -21,6 +21,9 @@ from app.routers.recordings import router as recordings_router
 from app.routers.auth import router as auth_router
 from app.routers.settings import router as settings_router, init_default_settings
 from app.routers.audit import router as audit_router
+from app.routers.system import router as system_router
+from app.routers.incidents import router as incidents_router
+from app.routers.cloud import router as cloud_router
 from app.services.stream_manager import stream_manager
 from app.services.cloud_sync import periodic_cloud_sync
 from app.services.auth import create_default_admin
@@ -133,6 +136,9 @@ app.include_router(recordings_router, prefix="/api")
 app.include_router(maps_router, prefix="/api")
 app.include_router(ptz_router, prefix="/api")
 app.include_router(audit_router, prefix="/api")
+app.include_router(system_router, prefix="/api")
+app.include_router(incidents_router, prefix="/api")
+app.include_router(cloud_router, prefix="/api")
 
 
 @app.get("/")

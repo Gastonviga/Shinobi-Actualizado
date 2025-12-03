@@ -32,8 +32,10 @@ services:
       - ./backend:/app
       - ./storage:/app/storage
       - ./config:/config  # For Frigate config generation
-      - //var/run/docker.sock:/var/run/docker.sock  # For container restart (Linux/Mac)
-      # Windows: use named pipe - //./pipe/docker_engine:/var/run/docker.sock
+      # Docker socket for container management (needed for Go2RTC restart)
+      # Linux/Mac: //var/run/docker.sock:/var/run/docker.sock
+      # Windows: //./pipe/docker_engine:/var/run/docker.sock
+      - //./pipe/docker_engine:/var/run/docker.sock
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./storage/titannvr.db
       - GO2RTC_URL=http://go2rtc:1984

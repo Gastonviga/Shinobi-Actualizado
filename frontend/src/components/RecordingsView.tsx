@@ -1,21 +1,17 @@
 import { useState, useEffect } from 'react'
 import {
   HardDrive,
-  Cloud,
-  CloudOff,
   RefreshCw,
   Play,
   Calendar,
-  Clock,
   Film,
-  Upload,
-  CheckCircle,
-  AlertCircle,
+  Video,
   Loader2,
   X,
   Trash2,
   Filter,
-  Camera
+  Camera,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,23 +41,12 @@ interface RecordingStats {
   total_size_gb: number
 }
 
-interface BackupStatus {
-  service_available: boolean
-  remotes: { status: string; remotes?: string[] }
-  sync_status: {
-    is_syncing: boolean
-    last_sync: string | null
-  }
-}
 
 export function RecordingsView() {
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [stats, setStats] = useState<RecordingStats | null>(null)
-  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null)
-  const [activeTab, setActiveTab] = useState<'recordings' | 'backup'>('recordings')
   
   // Filters
   const [cameras, setCameras] = useState<CameraType[]>([])
@@ -90,16 +75,14 @@ export function RecordingsView() {
       if (filterCamera) params.append('camera', filterCamera)
       if (filterDate) params.append('date', filterDate)
       
-      const [recordingsRes, statsRes, backupRes, camerasRes] = await Promise.all([
+      const [recordingsRes, statsRes, camerasRes] = await Promise.all([
         api.get(`/recordings/?${params.toString()}`),
         api.get('/recordings/stats'),
-        api.get('/recordings/backup/status').catch(() => ({ data: null })),
         getCameras()
       ])
       
       setRecordings(recordingsRes.data.recordings || [])
       setStats(statsRes.data)
-      setBackupStatus(backupRes.data)
       setCameras(camerasRes)
     } catch (err) {
       console.error('Failed to load recordings:', err)
@@ -164,16 +147,11 @@ export function RecordingsView() {
     }
   }
 
-  const triggerBackup = async () => {
-    setSyncing(true)
-    try {
-      await api.post('/recordings/backup/sync')
-      await loadData()
-    } catch (err) {
-      console.error('Backup failed:', err)
-    } finally {
-      setSyncing(false)
-    }
+  // Helper to detect if recording is an event clip
+  const isEventClip = (recording: Recording): boolean => {
+    return recording.path.includes('/clips/') || 
+           recording.name.includes('_clip') ||
+           recording.size_mb < 50 // Clips are typically smaller
   }
 
   const formatDate = (dateStr: string) => {
@@ -196,24 +174,12 @@ export function RecordingsView() {
 
   return (
     <div className="space-y-6">
-      {/* Header with tabs */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          <Button
-            variant={activeTab === 'recordings' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('recordings')}
-          >
-            <Film className="w-4 h-4 mr-2" />
-            Grabaciones
-          </Button>
-          <Button
-            variant={activeTab === 'backup' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('backup')}
-          >
-            <Cloud className="w-4 h-4 mr-2" />
-            Backup
-          </Button>
-        </div>
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Film className="w-5 h-5" />
+          Grabaciones
+        </h2>
         
         <Button variant="outline" onClick={loadData}>
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -266,31 +232,11 @@ export function RecordingsView() {
             </CardContent>
           </Card>
           
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-500/10">
-                  {backupStatus?.service_available ? (
-                    <Cloud className="w-5 h-5 text-orange-500" />
-                  ) : (
-                    <CloudOff className="w-5 h-5 text-orange-500" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">
-                    {backupStatus?.service_available ? 'Conectado' : 'No Configurado'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Backup Cloud</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
 
-      {/* Content based on active tab */}
-      {activeTab === 'recordings' ? (
-        <Card>
+      {/* Recordings List */}
+      <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Film className="w-5 h-5" />
@@ -383,124 +329,86 @@ export function RecordingsView() {
                   </div>
                 )}
                 
-                {recordings.map((recording, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors ${
-                      selectedFiles.has(recording.path) ? 'bg-accent/30 border-primary/50' : ''
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Checkbox
-                        checked={selectedFiles.has(recording.path)}
-                        onCheckedChange={() => toggleFileSelection(recording.path)}
-                      />
-                      <div className="p-2 rounded bg-muted">
-                        <Play className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{recording.name}</p>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDate(recording.modified)}
-                          </span>
-                          <span>{recording.camera}</span>
+                {recordings.map((recording, idx) => {
+                  const isClip = isEventClip(recording)
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedRecording(recording)}
+                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors ${
+                        selectedFiles.has(recording.path) ? 'bg-accent/30 border-primary/50' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={selectedFiles.has(recording.path)}
+                          onCheckedChange={(e) => {
+                            e.stopPropagation?.()
+                            toggleFileSelection(recording.path)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className={`p-2 rounded ${
+                          isClip 
+                            ? 'bg-amber-500/10 text-amber-500' 
+                            : 'bg-blue-500/10 text-blue-500'
+                        }`}>
+                          {isClip ? <Zap className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{recording.name}</p>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-[10px] px-1.5 py-0 ${
+                                isClip 
+                                  ? 'border-amber-500/50 text-amber-500' 
+                                  : 'border-blue-500/50 text-blue-500'
+                              }`}
+                            >
+                              {isClip ? 'Evento' : 'Continua'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(recording.modified)}
+                            </span>
+                            <span>{recording.camera}</span>
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{recording.size_mb} MB</Badge>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedRecording(recording)
+                          }}
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteConfirm(recording)
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">{recording.size_mb} MB</Badge>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSelectedRecording(recording)}
-                      >
-                        <Play className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                        onClick={() => setDeleteConfirm(recording)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>
         </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cloud className="w-5 h-5" />
-              Backup en la Nube
-            </CardTitle>
-            <CardDescription>
-              Sincronización automática con Google Drive
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Backup Status */}
-            <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="flex items-center gap-3">
-                {backupStatus?.service_available ? (
-                  <CheckCircle className="w-6 h-6 text-green-500" />
-                ) : (
-                  <AlertCircle className="w-6 h-6 text-yellow-500" />
-                )}
-                <div>
-                  <p className="font-medium">
-                    {backupStatus?.service_available 
-                      ? 'Servicio de Backup Activo' 
-                      : 'Servicio No Disponible'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {backupStatus?.remotes?.remotes?.length 
-                      ? `Remotes: ${backupStatus.remotes.remotes.join(', ')}`
-                      : 'Configura un remote en Rclone para habilitar backup'}
-                  </p>
-                </div>
-              </div>
-              
-              <Button
-                onClick={triggerBackup}
-                disabled={!backupStatus?.service_available || syncing}
-              >
-                {syncing ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" />
-                )}
-                {syncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
-              </Button>
-            </div>
-
-            {/* Last Sync Info */}
-            {backupStatus?.sync_status?.last_sync && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                Última sincronización: {formatDate(backupStatus.sync_status.last_sync)}
-              </div>
-            )}
-
-            {/* Configuration Help */}
-            <div className="p-4 rounded-lg bg-muted/50">
-              <h4 className="font-medium mb-2">Configurar Google Drive</h4>
-              <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Visita <a href="http://localhost:5572" target="_blank" className="text-primary hover:underline">http://localhost:5572</a> (Rclone Web GUI)</li>
-                <li>Crea un nuevo remote llamado "drive" de tipo Google Drive</li>
-                <li>Autoriza el acceso a tu cuenta de Google</li>
-                <li>El backup se ejecutará automáticamente cada hora</li>
-              </ol>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Video Player Dialog */}
       <Dialog open={!!selectedRecording} onOpenChange={() => setSelectedRecording(null)}>

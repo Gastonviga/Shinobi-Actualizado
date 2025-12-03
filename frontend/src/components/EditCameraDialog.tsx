@@ -6,7 +6,10 @@ import {
   Activity,
   Sparkles,
   Disc,
-  Save
+  Save,
+  Wifi,
+  WifiOff,
+  CheckCircle
 } from 'lucide-react'
 import {
   Dialog,
@@ -18,13 +21,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { updateCamera, type Camera as CameraType, type RecordingMode } from '@/lib/api'
+import { updateCamera, testCameraConnection, type Camera as CameraType, type RecordingMode } from '@/lib/api'
 
 interface EditCameraDialogProps {
   camera: CameraType | null
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: () => void | Promise<void>
 }
 
 const RECORDING_MODES = [
@@ -58,6 +61,10 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
+  // Connection test state
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  
   const [formData, setFormData] = useState({
     name: '',
     main_stream_url: '',
@@ -81,8 +88,37 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
         event_retention_days: camera.event_retention_days || 14,
       })
       setError(null)
+      setTestResult(null)
     }
   }, [camera, isOpen])
+
+  // Test stream connection
+  const handleTestConnection = async () => {
+    if (!formData.main_stream_url.trim()) {
+      setTestResult({ success: false, message: 'Ingrese una URL primero' })
+      return
+    }
+    
+    setIsTesting(true)
+    setTestResult(null)
+    
+    try {
+      const result = await testCameraConnection(formData.main_stream_url)
+      setTestResult({
+        success: result.success,
+        message: result.success 
+          ? result.details || 'Conexión exitosa'
+          : result.error || 'Error de conexión'
+      })
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Error al probar conexión'
+      })
+    } finally {
+      setIsTesting(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -102,7 +138,7 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
         event_retention_days: formData.event_retention_days,
       })
 
-      onSuccess()
+      await onSuccess()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al actualizar')
@@ -150,12 +186,44 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
             <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-400">Stream Principal (HD)</Label>
-                <Input
-                  value={formData.main_stream_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, main_stream_url: e.target.value }))}
-                  disabled={isLoading}
-                  className="bg-zinc-800 border-zinc-700 font-mono text-xs"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={formData.main_stream_url}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, main_stream_url: e.target.value }))
+                      setTestResult(null)
+                    }}
+                    disabled={isLoading || isTesting}
+                    className="bg-zinc-800 border-zinc-700 font-mono text-xs flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestConnection}
+                    disabled={isLoading || isTesting || !formData.main_stream_url.trim()}
+                    className="shrink-0 border-zinc-700"
+                  >
+                    {isTesting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-1" />Probando...</>
+                    ) : (
+                      <><Wifi className="w-4 h-4 mr-1" />Probar</>
+                    )}
+                  </Button>
+                </div>
+                {/* Test Result Indicator */}
+                {testResult && (
+                  <div className={`flex items-center gap-2 text-xs mt-1 ${
+                    testResult.success ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {testResult.success ? (
+                      <CheckCircle className="w-3 h-3" />
+                    ) : (
+                      <WifiOff className="w-3 h-3" />
+                    )}
+                    <span>{testResult.message}</span>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-400">Stream Secundario (SD)</Label>

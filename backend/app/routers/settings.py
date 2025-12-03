@@ -55,11 +55,23 @@ class PublicSettings(BaseModel):
 class SmtpConfig(BaseModel):
     """SMTP configuration for email notifications."""
     enabled: bool = False
+    provider: str = "custom"  # "gmail" | "custom"
     host: str = ""
     port: int = 587
     username: str = ""
     password: str = ""
     from_email: str = ""
+    use_tls: bool = True
+
+
+class SmtpTestRequest(BaseModel):
+    """Request for testing SMTP with optional live config."""
+    provider: str = "gmail"  # "gmail" | "custom"
+    email: str
+    password: str
+    # Only for custom provider
+    host: str = ""
+    port: int = 587
     use_tls: bool = True
 
 
@@ -295,42 +307,180 @@ async def update_smtp_config(
 
 @router.post("/smtp/test")
 async def test_smtp(
+    config: SmtpTestRequest,
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Test SMTP configuration by sending a test email."""
-    from app.services.notification import notification_service
+    """
+    Test SMTP configuration by sending a real test email.
     
-    # Load config
-    await notification_service.load_config(db)
+    Supports Gmail preset - if provider="gmail", automatically uses:
+    - host: smtp.gmail.com
+    - port: 587
+    - use_tls: True
     
-    if not notification_service._initialized:
-        raise HTTPException(
-            status_code=400,
-            detail="SMTP not configured or not enabled"
-        )
+    Returns detailed error messages for troubleshooting.
+    """
+    import aiosmtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from datetime import datetime
     
-    # Send test email
-    success = await notification_service.send_email(
-        to_emails=[admin.email] if admin.email else [],
-        subject="TitanNVR - Test Email",
-        body_html="""
-        <html>
-        <body>
-            <h2>✅ TitanNVR Email Test</h2>
-            <p>If you received this email, your SMTP configuration is working correctly.</p>
-        </body>
-        </html>
-        """
-    )
-    
-    if success:
-        return {"status": "ok", "message": "Test email sent successfully"}
+    # Apply Gmail preset if needed
+    if config.provider == "gmail":
+        host = "smtp.gmail.com"
+        port = 587
+        use_tls = True
     else:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to send test email. Check SMTP configuration."
+        host = config.host
+        port = config.port
+        use_tls = config.use_tls
+    
+    # Validate
+    if not config.email:
+        raise HTTPException(status_code=400, detail="Email es requerido")
+    if not config.password:
+        raise HTTPException(status_code=400, detail="Contraseña es requerida")
+    if config.provider != "gmail" and not host:
+        raise HTTPException(status_code=400, detail="Host SMTP es requerido para proveedor personalizado")
+    
+    # Build test email
+    recipient = config.email  # Send to the configured email
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "✅ TitanNVR - Prueba de Conexión Exitosa"
+    msg["From"] = config.email
+    msg["To"] = recipient
+    
+    body_html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+        <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <h2 style="color: #10b981; margin: 0 0 20px;">✅ Conexión SMTP Exitosa</h2>
+            <p>Tu configuración de notificaciones de TitanNVR está funcionando correctamente.</p>
+            <table style="width: 100%; margin-top: 20px; font-size: 14px;">
+                <tr>
+                    <td style="padding: 8px 0; color: #666;">Servidor:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{host}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666;">Puerto:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{port}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666;">Fecha:</td>
+                    <td style="padding: 8px 0; font-weight: bold;">{timestamp}</td>
+                </tr>
+            </table>
+            <p style="margin-top: 20px; color: #888; font-size: 12px;">
+                Ahora recibirás alertas de detección de movimiento y eventos.
+            </p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    msg.attach(MIMEText(body_html, "html"))
+    
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=host,
+            port=port,
+            username=config.email,
+            password=config.password,
+            start_tls=use_tls,
+            timeout=15
         )
+        
+        logger.info(f"SMTP test successful for {config.email}")
+        return {
+            "success": True,
+            "message": f"Email de prueba enviado a {recipient}",
+            "details": f"Servidor: {host}:{port}"
+        }
+        
+    except aiosmtplib.SMTPAuthenticationError as e:
+        logger.warning(f"SMTP auth failed for {config.email}: {e}")
+        error_msg = "Autenticación fallida. "
+        if config.provider == "gmail":
+            error_msg += "Verifica que estés usando una 'Contraseña de Aplicación' de Gmail, no tu contraseña normal."
+        else:
+            error_msg += "Usuario o contraseña incorrectos."
+        raise HTTPException(status_code=401, detail=error_msg)
+        
+    except aiosmtplib.SMTPConnectError as e:
+        logger.warning(f"SMTP connect failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"No se pudo conectar a {host}:{port}. Verifica el servidor y puerto."
+        )
+        
+    except aiosmtplib.SMTPException as e:
+        logger.error(f"SMTP error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error SMTP: {str(e)}")
+        
+    except Exception as e:
+        logger.error(f"Unexpected SMTP error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+
+
+@router.post("/smtp/save")
+async def save_smtp_config(
+    config: SmtpTestRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save SMTP configuration after successful test.
+    
+    Applies Gmail preset automatically if provider="gmail".
+    """
+    # Apply Gmail preset
+    if config.provider == "gmail":
+        host = "smtp.gmail.com"
+        port = 587
+        use_tls = True
+    else:
+        host = config.host
+        port = config.port
+        use_tls = config.use_tls
+    
+    smtp_config = {
+        "enabled": True,
+        "provider": config.provider,
+        "host": host,
+        "port": port,
+        "username": config.email,
+        "password": config.password,
+        "from_email": config.email,
+        "use_tls": use_tls
+    }
+    
+    result = await db.execute(
+        select(SystemSettings).where(SystemSettings.key == "smtp_config")
+    )
+    setting = result.scalar_one_or_none()
+    
+    if setting:
+        setting.value_json = smtp_config
+    else:
+        setting = SystemSettings(
+            key="smtp_config",
+            value_json=smtp_config,
+            description="SMTP configuration for email notifications"
+        )
+        db.add(setting)
+    
+    await db.commit()
+    
+    logger.info(f"SMTP configuration saved by {admin.username}")
+    
+    return {
+        "success": True,
+        "message": "Configuración de notificaciones guardada"
+    }
 
 
 # ============================================================

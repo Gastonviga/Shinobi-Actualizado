@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   getMaps,
   getMap,
+  getMapAlerts,
   createMap,
   deleteMap,
   updateCameraPosition,
@@ -28,6 +29,7 @@ import {
   type MapInfo,
   type MapWithCameras,
   type MapCameraInfo,
+  type CameraAlertInfo,
   type Camera as CameraType
 } from '@/lib/api'
 
@@ -57,6 +59,9 @@ export function MapsView() {
   const [unpositionedCameras, setUnpositionedCameras] = useState<CameraType[]>([])
   const [allCameras, setAllCameras] = useState<CameraType[]>([])
   const [selectedCameraForView, setSelectedCameraForView] = useState<CameraType | null>(null)
+  
+  // Alert state for real-time updates
+  const [cameraAlerts, setCameraAlerts] = useState<Record<number, CameraAlertInfo>>({})
   
   // Drag state
   const [draggingCamera, setDraggingCamera] = useState<CameraType | MapCameraInfo | null>(null)
@@ -206,6 +211,29 @@ export function MapsView() {
     loadCameras()
   }, [loadMaps, loadCameras])
 
+  // Poll for camera alerts every 5 seconds (only when not editing)
+  useEffect(() => {
+    if (!selectedMap || isEditMode) return
+    
+    const pollAlerts = async () => {
+      try {
+        const response = await getMapAlerts(selectedMap.id)
+        setCameraAlerts(response.alerts)
+      } catch (err) {
+        // Silently ignore polling errors
+        console.debug('[MapsView] Alert polling error:', err)
+      }
+    }
+    
+    // Initial fetch
+    pollAlerts()
+    
+    // Set up interval
+    const interval = setInterval(pollAlerts, 5000)
+    
+    return () => clearInterval(interval)
+  }, [selectedMap?.id, isEditMode])
+
   if (loading && maps.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -299,7 +327,13 @@ export function MapsView() {
               <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
               {/* Camera Icons */}
-              {selectedMap.cameras.map((camera) => (
+              {selectedMap.cameras.map((camera) => {
+                // Use real-time alert status from polling, fallback to initial status
+                const alertInfo = cameraAlerts[camera.id]
+                const hasActiveAlert = alertInfo?.has_alert ?? camera.has_alert
+                const alertLabel = alertInfo?.label
+                
+                return (
                 <div
                   key={camera.id}
                   className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-transform hover:scale-110 ${
@@ -313,7 +347,7 @@ export function MapsView() {
                   {/* Camera Marker */}
                   <div className="relative group">
                     {/* Radar Pulse Effect for recording/alert */}
-                    {(camera.is_recording || camera.has_alert) && !isEditMode && (
+                    {(camera.is_recording || hasActiveAlert) && !isEditMode && (
                       <>
                         <div className="absolute inset-0 -m-2 rounded-full bg-red-500/30 animate-ping" />
                         <div className="absolute inset-0 -m-1 rounded-full bg-red-500/50 animate-pulse" />
@@ -324,7 +358,7 @@ export function MapsView() {
                     <div className={`
                       relative z-10 p-2 rounded-full shadow-lg border-2 transition-colors
                       ${camera.is_active 
-                        ? camera.is_recording || camera.has_alert
+                        ? camera.is_recording || hasActiveAlert
                           ? 'bg-red-600 border-red-400' 
                           : 'bg-blue-600 border-blue-400'
                         : 'bg-zinc-600 border-zinc-500'
@@ -338,6 +372,11 @@ export function MapsView() {
                       <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
                         <p className="text-sm font-medium text-zinc-100">{camera.name}</p>
                         <div className="flex items-center gap-2 mt-1">
+                          {hasActiveAlert && alertLabel && (
+                            <Badge variant="destructive" className="text-xs py-0 animate-pulse">
+                              ⚠️ {alertLabel.toUpperCase()}
+                            </Badge>
+                          )}
                           {camera.is_recording && (
                             <Badge variant="destructive" className="text-xs py-0">
                               REC
@@ -369,7 +408,8 @@ export function MapsView() {
                     )}
                   </div>
                 </div>
-              ))}
+              )})}
+              
 
               {/* Edit Mode Hint */}
               {isEditMode && (

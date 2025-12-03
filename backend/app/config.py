@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # Go2RTC Configuration
     go2rtc_url: str = "http://go2rtc:1984"
+    go2rtc_container: str = "titan-go2rtc"  # Docker container name for restart
     
     # Storage
     storage_path: str = "./storage"

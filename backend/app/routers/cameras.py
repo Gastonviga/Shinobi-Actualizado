@@ -179,16 +179,21 @@ async def create_cameras_bulk(
     # Commit all changes
     await db.commit()
     
-    # Register all streams in Go2RTC
+    # Register all streams in Go2RTC (don't restart after each one)
     for camera in created_cameras:
         try:
             await stream_manager.register_stream(
                 name=camera.name,
                 main_stream_url=camera.main_stream_url,
-                sub_stream_url=camera.sub_stream_url
+                sub_stream_url=camera.sub_stream_url,
+                restart_after=False  # Don't restart for each camera
             )
         except Exception as e:
             logger.error(f"Failed to register '{camera.name}' in Go2RTC: {e}")
+    
+    # Restart Go2RTC once at the end if any cameras were created
+    if created_cameras:
+        await stream_manager.restart_go2rtc()
     
     # Sync Frigate config once at the end
     if created_cameras:
@@ -456,3 +461,76 @@ async def get_all_cameras_status(db: AsyncSession = Depends(get_db)):
         })
     
     return {"cameras": statuses}
+
+
+# ============================================================
+# Stream Connection Test (QA Feature)
+# ============================================================
+
+from pydantic import BaseModel
+
+class StreamTestRequest(BaseModel):
+    """Request body for stream connection test"""
+    stream_url: str
+
+class StreamTestResponse(BaseModel):
+    """Response for stream connection test"""
+    success: bool
+    details: str | None = None
+    error: str | None = None
+
+
+@router.post("/test", response_model=StreamTestResponse)
+async def test_camera_connection(request: StreamTestRequest):
+    """
+    Test if a stream URL is accessible before saving a camera.
+    
+    This QA endpoint temporarily registers the stream in Go2RTC,
+    waits for connection, checks if data is being received,
+    and then cleans up the temporary stream.
+    
+    **Use cases:**
+    - Validate RTSP URLs before creating cameras
+    - Check if credentials are correct
+    - Verify network connectivity to camera
+    
+    **Request Body:**
+    ```json
+    {
+        "stream_url": "rtsp://user:pass@192.168.1.100:554/stream1"
+    }
+    ```
+    
+    **Response:**
+    - Success: `{"success": true, "details": "Conexión exitosa - Recibiendo datos"}`
+    - Failure: `{"success": false, "error": "No se pudo conectar", "details": "..."}`
+    
+    **Note:** This endpoint may take 3-5 seconds to respond while testing connection.
+    """
+    logger.info(f"Testing stream connection: {request.stream_url[:50]}...")
+    
+    # Validate URL format
+    if not request.stream_url:
+        return StreamTestResponse(
+            success=False,
+            error="URL vacía",
+            details="Debe proporcionar una URL de stream"
+        )
+    
+    # Basic URL validation
+    valid_schemes = ['rtsp://', 'rtsps://', 'http://', 'https://']
+    if not any(request.stream_url.lower().startswith(scheme) for scheme in valid_schemes):
+        return StreamTestResponse(
+            success=False,
+            error="Protocolo no soportado",
+            details=f"Use: {', '.join(valid_schemes)}"
+        )
+    
+    # Test the stream
+    result = await stream_manager.test_stream_connection(request.stream_url)
+    
+    return StreamTestResponse(
+        success=result.get("success", False),
+        details=result.get("details"),
+        error=result.get("error")
+    )

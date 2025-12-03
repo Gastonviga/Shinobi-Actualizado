@@ -1,7 +1,6 @@
 import { 
   MapPin, 
   Circle, 
-  X, 
   Maximize, 
   Minimize,
   ChevronUp,
@@ -11,7 +10,8 @@ import {
   ZoomIn,
   ZoomOut,
   Move,
-  Crosshair
+  Crosshair,
+  X
 } from 'lucide-react'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -294,27 +294,18 @@ export function CameraViewDialog({ camera, isOpen, onClose }: CameraViewDialogPr
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleFullscreen}
-              title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-            >
-              {isFullscreen ? (
-                <Minimize className="w-5 h-5" />
-              ) : (
-                <Maximize className="w-5 h-5" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+          >
+            {isFullscreen ? (
+              <Minimize className="w-5 h-5" />
+            ) : (
+              <Maximize className="w-5 h-5" />
+            )}
+          </Button>
         </div>
 
         {/* Video Player - HD Quality with PTZ Overlay */}

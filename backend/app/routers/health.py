@@ -131,17 +131,19 @@ async def force_sync_cameras(reload: bool = True):
                 await stream_manager.register_stream(
                     name=camera.name,
                     main_stream_url=camera.main_stream_url,
-                    sub_stream_url=camera.sub_stream_url
+                    sub_stream_url=camera.sub_stream_url,
+                    restart_after=False  # Don't restart for each camera
                 )
                 synced += 1
             except Exception as e:
                 failed += 1
                 errors.append({"camera": camera.name, "error": str(e)})
         
-        # Reload Go2RTC if requested
+        # Restart Go2RTC once at the end if requested
         reload_result = None
         if reload and synced > 0:
-            reload_result = await stream_manager.reload_go2rtc()
+            restarted = await stream_manager.restart_go2rtc()
+            reload_result = {"status": "success" if restarted else "error", "message": "Go2RTC restarted" if restarted else "Failed to restart Go2RTC"}
         
         return {
             "status": "ok" if failed == 0 else "partial",
@@ -161,8 +163,11 @@ async def reload_go2rtc():
     Use this after adding/removing cameras to apply the changes.
     Requires Docker socket to be mounted.
     """
-    result = await stream_manager.reload_go2rtc()
-    return result
+    restarted = await stream_manager.restart_go2rtc()
+    return {
+        "status": "success" if restarted else "error",
+        "message": "Go2RTC restarted successfully" if restarted else "Failed to restart Go2RTC"
+    }
 
 
 @router.post("/frigate/sync")

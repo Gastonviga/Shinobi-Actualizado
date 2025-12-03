@@ -44,8 +44,15 @@ class AuditAction:
     EVENT_ACKNOWLEDGE = "EVENT_ACKNOWLEDGE"
     EVENT_EXPORT = "EVENT_EXPORT"
     
+    # Evidence/Incidents
+    EVIDENCE_EXPORT = "EVIDENCE_EXPORT"
+    EVIDENCE_DELETE = "EVIDENCE_DELETE"
+    
     # PTZ Control
     PTZ_CONTROL = "PTZ_CONTROL"
+    
+    # System
+    SYSTEM_SETTINGS = "SYSTEM_SETTINGS"
 
 
 class AuditLog(Base):

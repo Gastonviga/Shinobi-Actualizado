@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import datetime, timedelta
+
 from app.database import get_db
 from app.models.map import Map
 from app.models.camera import Camera
@@ -31,6 +33,9 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 router = APIRouter(prefix="/maps", tags=["maps"])
+
+# Alert threshold - cameras with events in last N seconds show alert
+ALERT_THRESHOLD_SECONDS = 30
 
 # Storage path for map images
 MAPS_STORAGE_PATH = os.path.join(settings.storage_path, "maps")
@@ -98,6 +103,23 @@ async def get_map(
     )
     cameras = cameras_result.scalars().all()
     
+    # Import recent_events here to check for active alerts
+    from app.routers.events import recent_events
+    
+    # Check which cameras have recent alerts (within threshold)
+    now = datetime.utcnow()
+    alert_threshold = now - timedelta(seconds=ALERT_THRESHOLD_SECONDS)
+    
+    # Build set of cameras with recent alerts
+    cameras_with_alerts = set()
+    for event in recent_events:
+        try:
+            event_time = datetime.fromisoformat(event.get("timestamp", "").replace("Z", ""))
+            if event_time >= alert_threshold:
+                cameras_with_alerts.add(event.get("camera", "").lower())
+        except (ValueError, AttributeError):
+            continue
+    
     cameras_info = [
         MapCameraInfo(
             id=c.id,
@@ -107,7 +129,7 @@ async def get_map(
             is_recording=c.is_recording,
             is_active=c.is_active,
             features_ptz=c.features_ptz,
-            has_alert=False  # Future: check for active alerts
+            has_alert=c.name.lower().replace(" ", "_") in cameras_with_alerts or c.name.lower() in cameras_with_alerts
         )
         for c in cameras
     ]
@@ -367,3 +389,73 @@ async def get_unpositioned_cameras(
     )
     cameras = result.scalars().all()
     return cameras
+
+
+@router.get("/{map_id}/alerts")
+async def get_map_camera_alerts(
+    map_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Get lightweight alert status for cameras on a map.
+    
+    Designed for frequent polling (every 5 seconds) to update
+    camera alert indicators in real-time.
+    
+    Returns a dict mapping camera_id -> has_alert status.
+    """
+    # Get cameras positioned on this map
+    cameras_result = await db.execute(
+        select(Camera).where(
+            Camera.map_id == map_id,
+            Camera.map_x.isnot(None),
+            Camera.map_y.isnot(None)
+        )
+    )
+    cameras = cameras_result.scalars().all()
+    
+    if not cameras:
+        return {"alerts": {}, "timestamp": datetime.utcnow().isoformat()}
+    
+    # Import recent_events to check for active alerts
+    from app.routers.events import recent_events
+    
+    # Check which cameras have recent alerts (within threshold)
+    now = datetime.utcnow()
+    alert_threshold = now - timedelta(seconds=ALERT_THRESHOLD_SECONDS)
+    
+    # Build dict of camera alerts with event info
+    alerts = {}
+    for camera in cameras:
+        camera_name_normalized = camera.name.lower().replace(" ", "_")
+        has_alert = False
+        alert_label = None
+        alert_score = None
+        
+        for event in recent_events:
+            try:
+                event_time = datetime.fromisoformat(event.get("timestamp", "").replace("Z", ""))
+                event_camera = event.get("camera", "").lower()
+                
+                if event_time >= alert_threshold and (
+                    event_camera == camera_name_normalized or 
+                    event_camera == camera.name.lower()
+                ):
+                    has_alert = True
+                    alert_label = event.get("label", "motion")
+                    alert_score = event.get("score", 0)
+                    break
+            except (ValueError, AttributeError):
+                continue
+        
+        alerts[camera.id] = {
+            "has_alert": has_alert,
+            "label": alert_label,
+            "score": alert_score
+        }
+    
+    return {
+        "alerts": alerts,
+        "timestamp": datetime.utcnow().isoformat()
+    }

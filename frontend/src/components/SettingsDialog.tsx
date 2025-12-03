@@ -15,7 +15,14 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  FileText
+  FileText,
+  Activity,
+  Mail,
+  Cloud,
+  ExternalLink,
+  Unlink,
+  KeyRound,
+  Send
 } from 'lucide-react'
 import {
   Dialog,
@@ -26,8 +33,26 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { api, type User } from '@/lib/api'
+import { 
+  api, 
+  type User,
+  testSmtpConnection,
+  saveSmtpConfig,
+  getSmtpConfig,
+  getDriveStatus,
+  getOAuthStatus,
+  saveOAuthCredentials,
+  deleteOAuthCredentials,
+  startDriveAuth,
+  verifyDriveAuth,
+  testDriveUpload,
+  disconnectDrive,
+  type SmtpConfig,
+  type DriveStatus,
+  type OAuthStatus
+} from '@/lib/api'
 import { AuditPanel } from '@/components/AuditPanel'
+import { SystemStatusPanel } from '@/components/SystemStatusPanel'
 import { useAuth } from '@/contexts/AuthContext'
 
 const MAX_LOGO_SIZE = 2 * 1024 * 1024 // 2MB
@@ -59,7 +84,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'audit'>('branding')
+  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'notifications' | 'cloud' | 'audit' | 'system'>('branding')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -81,6 +106,26 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [users, setUsers] = useState<User[]>([])
   const [showNewUser, setShowNewUser] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer' })
+  
+  // Notifications (SMTP) state
+  const [smtpEmail, setSmtpEmail] = useState('')
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [smtpConfigured, setSmtpConfigured] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  
+  // Cloud (Drive) state
+  const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null)
+  const [driveAuthUrl, setDriveAuthUrl] = useState<string | null>(null)
+  const [driveAuthCode, setDriveAuthCode] = useState('')
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isTestingUpload, setIsTestingUpload] = useState(false)
+  const [driveTestResult, setDriveTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  
+  // OAuth credentials state
+  const [oauthClientId, setOauthClientId] = useState('')
+  const [oauthClientSecret, setOauthClientSecret] = useState('')
+  const [isSavingOAuth, setIsSavingOAuth] = useState(false)
 
   // Load settings and users
   useEffect(() => {
@@ -111,6 +156,25 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       // Load users
       const usersRes = await api.get<User[]>('/auth/users')
       setUsers(usersRes.data)
+      
+      // Load SMTP config
+      try {
+        const smtpConfig = await getSmtpConfig()
+        if (smtpConfig && smtpConfig.enabled) {
+          setSmtpEmail(smtpConfig.username || '')
+          setSmtpConfigured(true)
+        }
+      } catch {
+        // SMTP not configured yet
+      }
+      
+      // Load Drive status
+      try {
+        const status = await getDriveStatus()
+        setDriveStatus(status)
+      } catch {
+        // Drive not configured yet
+      }
     } catch (err) {
       console.error('Failed to load settings:', err)
     } finally {
@@ -222,9 +286,176 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     }
   }
 
+  // ============================================================
+  // Notifications (SMTP) Handlers
+  // ============================================================
+  
+  const handleTestEmail = async () => {
+    if (!smtpEmail || !smtpPassword) {
+      setTestResult({ success: false, message: 'Completa el email y contraseña' })
+      return
+    }
+    
+    setIsTesting(true)
+    setTestResult(null)
+    
+    try {
+      const result = await testSmtpConnection({
+        provider: 'gmail',
+        email: smtpEmail,
+        password: smtpPassword
+      })
+      setTestResult({ success: result.success, message: result.message })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al enviar email de prueba'
+      setTestResult({ success: false, message })
+    } finally {
+      setIsTesting(false)
+    }
+  }
+  
+  const handleSaveSmtp = async () => {
+    if (!smtpEmail || !smtpPassword) {
+      setAlert({ type: 'error', message: 'Completa el email y contraseña' })
+      return
+    }
+    
+    setIsSaving(true)
+    try {
+      await saveSmtpConfig({
+        provider: 'gmail',
+        email: smtpEmail,
+        password: smtpPassword
+      })
+      setSmtpConfigured(true)
+      setAlert({ type: 'success', message: 'Configuración de notificaciones guardada' })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al guardar configuración'
+      setAlert({ type: 'error', message })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // ============================================================
+  // Cloud (Drive) Handlers
+  // ============================================================
+  
+  const handleStartDriveAuth = async () => {
+    setIsConnecting(true)
+    setDriveTestResult(null)
+    
+    try {
+      const result = await startDriveAuth()
+      setDriveAuthUrl(result.auth_url)
+      // Open auth URL in new window
+      window.open(result.auth_url, '_blank', 'width=600,height=700')
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al iniciar autorización'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+  
+  const handleVerifyDriveCode = async () => {
+    if (!driveAuthCode) {
+      setDriveTestResult({ success: false, message: 'Ingresa el código de autorización' })
+      return
+    }
+    
+    setIsConnecting(true)
+    setDriveTestResult(null)
+    
+    try {
+      await verifyDriveAuth(driveAuthCode)
+      const status = await getDriveStatus()
+      setDriveStatus(status)
+      setDriveAuthUrl(null)
+      setDriveAuthCode('')
+      setDriveTestResult({ success: true, message: 'Google Drive conectado exitosamente' })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Código inválido o expirado'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+  
+  const handleTestDriveUpload = async () => {
+    setIsTestingUpload(true)
+    setDriveTestResult(null)
+    
+    try {
+      const result = await testDriveUpload()
+      setDriveTestResult({ success: result.success, message: result.message })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al subir archivo de prueba'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsTestingUpload(false)
+    }
+  }
+  
+  const handleDisconnectDrive = async () => {
+    setIsConnecting(true)
+    try {
+      await disconnectDrive()
+      setDriveStatus(null)
+      setDriveTestResult({ success: true, message: 'Google Drive desvinculado' })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al desvincular'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+  
+  const handleSaveOAuthCredentials = async () => {
+    if (!oauthClientId || !oauthClientSecret) {
+      setDriveTestResult({ success: false, message: 'Completa Client ID y Client Secret' })
+      return
+    }
+    
+    setIsSavingOAuth(true)
+    setDriveTestResult(null)
+    
+    try {
+      await saveOAuthCredentials({ client_id: oauthClientId, client_secret: oauthClientSecret })
+      // Reload status to update oauth_configured
+      const status = await getDriveStatus()
+      setDriveStatus(status)
+      setDriveTestResult({ success: true, message: 'Credenciales OAuth guardadas' })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al guardar credenciales'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsSavingOAuth(false)
+    }
+  }
+
+  const handleResetOAuth = async () => {
+    setIsConnecting(true)
+    try {
+      await deleteOAuthCredentials()
+      // Reset all Drive-related state
+      setDriveStatus(null)
+      setDriveAuthUrl(null)
+      setDriveAuthCode('')
+      setOauthClientId('')
+      setOauthClientSecret('')
+      setDriveTestResult({ success: true, message: 'Credenciales eliminadas. Puedes configurar nuevas.' })
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al eliminar credenciales'
+      setDriveTestResult({ success: false, message })
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`bg-zinc-900 border-zinc-800 p-0 ${activeTab === 'audit' ? 'sm:max-w-[900px]' : 'sm:max-w-[600px]'}`}>
+      <DialogContent className="bg-zinc-900 border-zinc-800 p-0 sm:max-w-4xl w-[95vw]">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
             <Settings className="w-5 h-5" />
@@ -257,18 +488,53 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             Usuarios
           </button>
           {isAdmin && (
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'audit' 
-                  ? 'text-blue-400 border-b-2 border-blue-400' 
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              Auditoría
-            </button>
+            <>
+              <button
+                onClick={() => setActiveTab('notifications')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'notifications' 
+                    ? 'text-blue-400 border-b-2 border-blue-400' 
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Mail className="w-4 h-4" />
+                Email
+              </button>
+              <button
+                onClick={() => setActiveTab('cloud')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'cloud' 
+                    ? 'text-blue-400 border-b-2 border-blue-400' 
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Cloud className="w-4 h-4" />
+                Nube
+              </button>
+              <button
+                onClick={() => setActiveTab('audit')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'audit' 
+                    ? 'text-blue-400 border-b-2 border-blue-400' 
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                Auditoría
+              </button>
+            </>
           )}
+          <button
+            onClick={() => setActiveTab('system')}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'system' 
+                ? 'text-blue-400 border-b-2 border-blue-400' 
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            Sistema
+          </button>
         </div>
 
         {/* Content */}
@@ -485,9 +751,325 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 </Button>
               )}
             </div>
-          ) : (
+          ) : activeTab === 'notifications' ? (
+            /* Notifications (Gmail) Tab */
+            <div className="space-y-4">
+              <div className="p-4 rounded-lg bg-gradient-to-br from-red-500/10 to-orange-500/10 border border-red-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-red-500/20">
+                    <Mail className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-zinc-100">Notificaciones Gmail</h3>
+                    <p className="text-xs text-zinc-400">Recibe alertas por email cuando se detecte movimiento</p>
+                  </div>
+                </div>
+                
+                {smtpConfigured && (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm mb-3">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Configurado: {smtpEmail}</span>
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-zinc-400">Tu correo de Gmail</Label>
+                  <Input
+                    type="email"
+                    placeholder="tu-email@gmail.com"
+                    value={smtpEmail}
+                    onChange={(e) => setSmtpEmail(e.target.value)}
+                    className="bg-zinc-800 border-zinc-700"
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-zinc-400 flex items-center gap-2">
+                    <KeyRound className="w-3 h-3" />
+                    Contraseña de Aplicación
+                  </Label>
+                  <Input
+                    type="password"
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    value={smtpPassword}
+                    onChange={(e) => setSmtpPassword(e.target.value)}
+                    className="bg-zinc-800 border-zinc-700 font-mono"
+                  />
+                  <p className="text-[10px] text-zinc-500">
+                    <a 
+                      href="https://myaccount.google.com/apppasswords" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:underline"
+                    >
+                      Genera una contraseña de aplicación
+                    </a>
+                    {' '}en tu cuenta de Google (no uses tu contraseña normal)
+                  </p>
+                </div>
+              </div>
+              
+              {/* Test Result */}
+              {testResult && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                  testResult.success 
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+                    : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                }`}>
+                  {testResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                  <span className="text-sm">{testResult.message}</span>
+                </div>
+              )}
+              
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleTestEmail}
+                  disabled={isTesting || !smtpEmail || !smtpPassword}
+                  className="flex-1 border-zinc-700"
+                >
+                  {isTesting ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Enviando...</>
+                  ) : (
+                    <><Send className="w-4 h-4 mr-2" />Enviar Email de Prueba</>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleSaveSmtp}
+                  disabled={isSaving || !smtpEmail || !smtpPassword}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Guardar</>}
+                </Button>
+              </div>
+            </div>
+          ) : activeTab === 'cloud' ? (
+            /* Cloud (Google Drive) Tab */
+            <div className="space-y-4">
+              {driveStatus?.connected ? (
+                /* Connected State */
+                <>
+                  <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-green-500/10 border border-blue-500/20">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-emerald-500/20">
+                        <CheckCircle className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-zinc-100">Conectado a Google Drive</h3>
+                        {driveStatus.email && (
+                          <p className="text-xs text-zinc-400">{driveStatus.email}</p>
+                        )}
+                        <p className="text-xs text-emerald-400">Carpeta: {driveStatus.folder}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Drive Test Result */}
+                  {driveTestResult && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      driveTestResult.success 
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+                        : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                    }`}>
+                      {driveTestResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{driveTestResult.message}</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleTestDriveUpload}
+                      disabled={isTestingUpload}
+                      className="flex-1 border-zinc-700"
+                    >
+                      {isTestingUpload ? (
+                        <><Loader2 className="w-4 h-4 animate-spin mr-2" />Subiendo...</>
+                      ) : (
+                        <><Cloud className="w-4 h-4 mr-2" />Subir Archivo de Prueba</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={handleDisconnectDrive}
+                      disabled={isConnecting}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    >
+                      <Unlink className="w-4 h-4 mr-2" />
+                      Desvincular
+                    </Button>
+                  </div>
+                </>
+              ) : !driveStatus?.oauth_configured ? (
+                /* Step 0: Configure OAuth Credentials */
+                <>
+                  <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-lg bg-blue-500/20">
+                        <Cloud className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-zinc-100">Google Drive</h3>
+                        <p className="text-xs text-zinc-400">Respalda grabaciones automáticamente en la nube</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                    <h4 className="font-medium text-yellow-400 mb-2">⚙️ Paso 1: Configurar Credenciales OAuth</h4>
+                    <p className="text-xs text-zinc-400 mb-3">
+                      Necesitas crear credenciales OAuth en Google Cloud Console:
+                    </p>
+                    <ol className="text-xs text-zinc-400 space-y-1 mb-3 list-decimal ml-4">
+                      <li>Ve a <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Google Cloud Console</a></li>
+                      <li>Crea un proyecto nuevo o selecciona uno existente</li>
+                      <li>Habilita la "Google Drive API"</li>
+                      <li>Ve a "Credenciales" → "Crear credenciales" → "ID de cliente OAuth"</li>
+                      <li>Tipo: "App de escritorio"</li>
+                      <li>Copia el Client ID y Client Secret aquí abajo</li>
+                    </ol>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Client ID</Label>
+                      <Input
+                        placeholder="xxxxx.apps.googleusercontent.com"
+                        value={oauthClientId}
+                        onChange={(e) => setOauthClientId(e.target.value)}
+                        className="bg-zinc-800 border-zinc-700 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-zinc-400">Client Secret</Label>
+                      <Input
+                        type="password"
+                        placeholder="GOCSPX-xxxxxxxxxxxx"
+                        value={oauthClientSecret}
+                        onChange={(e) => setOauthClientSecret(e.target.value)}
+                        className="bg-zinc-800 border-zinc-700 font-mono text-xs"
+                      />
+                    </div>
+                    
+                    <Button
+                      onClick={handleSaveOAuthCredentials}
+                      disabled={isSavingOAuth || !oauthClientId || !oauthClientSecret}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isSavingOAuth ? (
+                        <><Loader2 className="w-4 h-4 animate-spin mr-2" />Guardando...</>
+                      ) : (
+                        <><Save className="w-4 h-4 mr-2" />Guardar Credenciales</>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  {driveTestResult && (
+                    <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                      driveTestResult.success 
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+                        : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                    }`}>
+                      {driveTestResult.success ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                      <span className="text-sm">{driveTestResult.message}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* OAuth Configured - Now authorize */
+                <>
+                  <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-blue-500/20">
+                          <Cloud className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-zinc-100">Google Drive</h3>
+                          <p className="text-xs text-emerald-400">✓ Credenciales OAuth configuradas</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleResetOAuth}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Resetear
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {!driveAuthUrl ? (
+                    /* Step 2: Start Auth */
+                    <div className="text-center py-4">
+                      <p className="text-sm text-zinc-400 mb-4">
+                        Ahora autoriza tu cuenta de Google Drive
+                      </p>
+                      <Button
+                        onClick={handleStartDriveAuth}
+                        disabled={isConnecting}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {isConnecting ? (
+                          <><Loader2 className="w-4 h-4 animate-spin mr-2" />Abriendo...</>
+                        ) : (
+                          <><ExternalLink className="w-4 h-4 mr-2" />Autorizar con Google</>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    /* Step 3: Enter Code */
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-sm">
+                        <p>1. Autoriza en la ventana de Google que se abrió</p>
+                        <p>2. Copia el código de autorización</p>
+                        <p>3. Pégalo aquí abajo</p>
+                      </div>
+                      
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-zinc-400">Código de Autorización</Label>
+                        <Input
+                          placeholder="Pega el código de Google aquí"
+                          value={driveAuthCode}
+                          onChange={(e) => setDriveAuthCode(e.target.value)}
+                          className="bg-zinc-800 border-zinc-700 font-mono text-sm"
+                        />
+                      </div>
+                      
+                      <Button
+                        onClick={handleVerifyDriveCode}
+                        disabled={isConnecting || !driveAuthCode}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        {isConnecting ? (
+                          <><Loader2 className="w-4 h-4 animate-spin mr-2" />Verificando...</>
+                        ) : (
+                          <><CheckCircle className="w-4 h-4 mr-2" />Verificar y Conectar</>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Drive Test Result (errors) */}
+                  {driveTestResult && !driveTestResult.success && (
+                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-sm">{driveTestResult.message}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : activeTab === 'audit' ? (
             /* Audit Tab */
             <AuditPanel isAdmin={isAdmin} />
+          ) : (
+            /* System Tab */
+            <SystemStatusPanel isAdmin={isAdmin} />
           )}
         </div>
       </DialogContent>

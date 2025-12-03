@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { Camera, Loader2, HardDrive, Upload, FileJson, CheckCircle, AlertCircle, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Camera, Loader2, HardDrive, Upload, FileJson, CheckCircle, AlertCircle, X, Wifi, WifiOff } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -11,12 +11,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createCamera, createCamerasBulk, type CameraCreate, type RecordingMode, type BulkCreateResponse } from '@/lib/api'
+import { createCamera, createCamerasBulk, testCameraConnection, type CameraCreate, type RecordingMode, type BulkCreateResponse } from '@/lib/api'
 
 interface AddCameraDialogProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: () => void | Promise<void>
 }
 
 type TabMode = 'manual' | 'import'
@@ -33,6 +33,10 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // Connection test state
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  
   // Manual form state
   const [formData, setFormData] = useState<CameraCreate>({
     name: '',
@@ -44,6 +48,27 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
     recording_mode: 'motion',
     event_retention_days: 14,
   })
+  
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        name: '',
+        main_stream_url: '',
+        sub_stream_url: '',
+        location: '',
+        group: '',
+        retention_days: 7,
+        recording_mode: 'motion',
+        event_retention_days: 14,
+      })
+      setError(null)
+      setTestResult(null)
+      setActiveTab('manual')
+      setImportData(null)
+      setImportResult(null)
+    }
+  }, [isOpen])
   
   // Import state
   const [importData, setImportData] = useState<CameraCreate[] | null>(null)
@@ -69,14 +94,20 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
         sub_stream_url: formData.sub_stream_url || formData.main_stream_url,
       })
 
-      // Reset form and close
+      // Reset form
       setFormData({
         name: '',
         main_stream_url: '',
         sub_stream_url: '',
         location: '',
+        group: '',
+        retention_days: 7,
+        recording_mode: 'motion',
+        event_retention_days: 14,
       })
-      onSuccess()
+      
+      // Refresh camera list and close
+      await onSuccess()
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear la cámara')
@@ -89,6 +120,38 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     setFormData(prev => ({ ...prev, [field]: e.target.value }))
+    // Reset test result when URL changes
+    if (field === 'main_stream_url') {
+      setTestResult(null)
+    }
+  }
+
+  // Test stream connection
+  const handleTestConnection = async () => {
+    if (!formData.main_stream_url.trim()) {
+      setTestResult({ success: false, message: 'Ingrese una URL primero' })
+      return
+    }
+    
+    setIsTesting(true)
+    setTestResult(null)
+    
+    try {
+      const result = await testCameraConnection(formData.main_stream_url)
+      setTestResult({
+        success: result.success,
+        message: result.success 
+          ? result.details || 'Conexión exitosa'
+          : result.error || 'Error de conexión'
+      })
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Error al probar conexión'
+      })
+    } finally {
+      setIsTesting(false)
+    }
   }
 
   // Handle JSON file import
@@ -132,7 +195,7 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
       setImportResult(result)
       
       if (result.created > 0) {
-        onSuccess()
+        await onSuccess()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al importar cámaras')
@@ -238,17 +301,46 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
                   />
                 </div>
 
-                {/* Main Stream URL */}
+                {/* Main Stream URL with Test Button */}
                 <div className="space-y-1">
                   <Label htmlFor="main_stream_url" className="text-xs">Stream Principal (HD) *</Label>
-                  <Input
-                    id="main_stream_url"
-                    placeholder="rtsp://user:pass@192.168.1.100:554/stream1"
-                    value={formData.main_stream_url}
-                    onChange={handleChange('main_stream_url')}
-                    disabled={isLoading}
-                    className="font-mono text-xs"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="main_stream_url"
+                      placeholder="rtsp://user:pass@192.168.1.100:554/stream1"
+                      value={formData.main_stream_url}
+                      onChange={handleChange('main_stream_url')}
+                      disabled={isLoading || isTesting}
+                      className="font-mono text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTestConnection}
+                      disabled={isLoading || isTesting || !formData.main_stream_url.trim()}
+                      className="shrink-0"
+                    >
+                      {isTesting ? (
+                        <><Loader2 className="w-4 h-4 animate-spin mr-1" />Probando...</>
+                      ) : (
+                        <><Wifi className="w-4 h-4 mr-1" />Probar</>
+                      )}
+                    </Button>
+                  </div>
+                  {/* Test Result Indicator */}
+                  {testResult && (
+                    <div className={`flex items-center gap-2 text-xs mt-1 ${
+                      testResult.success ? 'text-green-500' : 'text-red-500'
+                    }`}>
+                      {testResult.success ? (
+                        <CheckCircle className="w-3 h-3" />
+                      ) : (
+                        <WifiOff className="w-3 h-3" />
+                      )}
+                      <span>{testResult.message}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Sub Stream URL */}

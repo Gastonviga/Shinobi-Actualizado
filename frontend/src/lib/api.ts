@@ -296,6 +296,30 @@ export const bulkDeleteCameras = async (cameraIds: number[]): Promise<BulkDelete
 }
 
 // ============================================================
+// Camera Connection Test (QA Feature)
+// ============================================================
+
+export interface StreamTestResponse {
+  success: boolean
+  details: string | null
+  error: string | null
+}
+
+/**
+ * Test if a stream URL is accessible before saving a camera.
+ * 
+ * This endpoint temporarily registers the stream in Go2RTC,
+ * waits for connection (~3 seconds), and returns the result.
+ * 
+ * @param streamUrl - The RTSP/HTTP stream URL to test
+ * @returns Promise with success status and details/error message
+ */
+export const testCameraConnection = async (streamUrl: string): Promise<StreamTestResponse> => {
+  const response = await api.post<StreamTestResponse>('/cameras/test', { stream_url: streamUrl })
+  return response.data
+}
+
+// ============================================================
 // Recordings API
 // ============================================================
 
@@ -484,6 +508,22 @@ export const getUnpositionedCameras = async (): Promise<Camera[]> => {
   return response.data
 }
 
+export interface CameraAlertInfo {
+  has_alert: boolean
+  label: string | null
+  score: number | null
+}
+
+export interface MapAlertsResponse {
+  alerts: Record<number, CameraAlertInfo>
+  timestamp: string
+}
+
+export const getMapAlerts = async (mapId: number): Promise<MapAlertsResponse> => {
+  const response = await api.get<MapAlertsResponse>(`/maps/${mapId}/alerts`)
+  return response.data
+}
+
 // ============================================================
 // PTZ Control API
 // ============================================================
@@ -666,5 +706,251 @@ export const getAuditStats = async (days: number = 7): Promise<AuditStats> => {
 
 export const getAuditActionTypes = async (): Promise<{ actions: AuditActionType[] }> => {
   const response = await api.get<{ actions: AuditActionType[] }>('/audit/actions')
+  return response.data
+}
+
+// ============================================================
+// System Health API
+// ============================================================
+
+export interface CPUStats {
+  percent_total: number
+  percent_per_core: number[]
+  core_count: number
+  frequency_mhz: number | null
+}
+
+export interface MemoryStats {
+  total_gb: number
+  used_gb: number
+  free_gb: number
+  percent_used: number
+}
+
+export interface DiskStats {
+  path: string
+  total_gb: number
+  used_gb: number
+  free_gb: number
+  percent_used: number
+  is_critical: boolean
+}
+
+export interface NetworkStats {
+  bytes_sent: number
+  bytes_recv: number
+  bytes_sent_gb: number
+  bytes_recv_gb: number
+}
+
+export interface UptimeStats {
+  seconds: number
+  formatted: string
+  started_at: string
+}
+
+export interface SystemHealth {
+  timestamp: string
+  cpu: CPUStats
+  memory: MemoryStats
+  disk: DiskStats
+  network: NetworkStats
+  uptime: UptimeStats
+  overall_status: 'healthy' | 'warning' | 'critical'
+  alerts: string[]
+}
+
+export interface ServicesStatus {
+  backend: string
+  go2rtc: string
+  frigate: string
+  mqtt: string
+  containers: Array<{
+    name: string
+    status: string
+    health: string | null
+  }>
+}
+
+export const getSystemStats = async (): Promise<SystemHealth> => {
+  const response = await api.get<SystemHealth>('/system/stats')
+  return response.data
+}
+
+export const getServicesStatus = async (): Promise<ServicesStatus> => {
+  const response = await api.get<ServicesStatus>('/system/services')
+  return response.data
+}
+
+// ============================================================
+// Evidence Export API
+// ============================================================
+
+export interface ExportRequest {
+  event_ids: string[]
+  case_name: string
+  case_number?: string
+  operator_notes?: string
+  include_snapshots?: boolean
+  include_clips?: boolean
+}
+
+export interface ExportResponse {
+  export_id: string
+  case_name: string
+  download_url: string
+  file_count: number
+  total_size_mb: number
+  created_at: string
+  expires_at: string
+}
+
+export interface ExportListItem {
+  export_id: string
+  case_name: string
+  case_number: string | null
+  created_at: string
+  created_by: string
+  file_count: number
+  size_mb: number
+  download_url: string
+}
+
+export const createEvidenceExport = async (request: ExportRequest): Promise<ExportResponse> => {
+  const response = await api.post<ExportResponse>('/export/create', request)
+  return response.data
+}
+
+export const listExports = async (): Promise<ExportListItem[]> => {
+  const response = await api.get<ExportListItem[]>('/export/list')
+  return response.data
+}
+
+export const deleteExport = async (exportId: string): Promise<void> => {
+  await api.delete(`/export/${exportId}`)
+}
+
+export const getExportDownloadUrl = (exportId: string): string => {
+  return `${API_URL}/export/download/${exportId}`
+}
+
+// ============================================================
+// Notifications (SMTP) API
+// ============================================================
+
+export interface SmtpTestRequest {
+  provider: 'gmail' | 'custom'
+  email: string
+  password: string
+  host?: string
+  port?: number
+  use_tls?: boolean
+}
+
+export interface SmtpTestResponse {
+  success: boolean
+  message: string
+  details?: string
+}
+
+export const testSmtpConnection = async (config: SmtpTestRequest): Promise<SmtpTestResponse> => {
+  const response = await api.post<SmtpTestResponse>('/settings/smtp/test', config)
+  return response.data
+}
+
+export const saveSmtpConfig = async (config: SmtpTestRequest): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/settings/smtp/save', config)
+  return response.data
+}
+
+export interface SmtpConfig {
+  enabled: boolean
+  provider: string
+  host: string
+  port: number
+  username: string
+  from_email: string
+  use_tls: boolean
+}
+
+export const getSmtpConfig = async (): Promise<SmtpConfig | null> => {
+  try {
+    const response = await api.get<{ value_json: SmtpConfig }>('/settings/smtp_config')
+    return response.data.value_json
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
+// Cloud (Google Drive) API
+// ============================================================
+
+export interface DriveStatus {
+  connected: boolean
+  email: string | null
+  remote_name: string
+  folder: string
+  oauth_configured: boolean
+}
+
+export interface OAuthCredentials {
+  client_id: string
+  client_secret: string
+}
+
+export interface OAuthStatus {
+  configured: boolean
+  client_id_preview: string | null
+}
+
+export interface DriveAuthResponse {
+  auth_url: string
+  instructions: string
+}
+
+export interface DriveTestUploadResponse {
+  success: boolean
+  message: string
+  filename?: string
+}
+
+export const getDriveStatus = async (): Promise<DriveStatus> => {
+  const response = await api.get<DriveStatus>('/cloud/drive/status')
+  return response.data
+}
+
+export const getOAuthStatus = async (): Promise<OAuthStatus> => {
+  const response = await api.get<OAuthStatus>('/cloud/drive/oauth-status')
+  return response.data
+}
+
+export const saveOAuthCredentials = async (creds: OAuthCredentials): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/cloud/drive/oauth-credentials', creds)
+  return response.data
+}
+
+export const deleteOAuthCredentials = async (): Promise<{ success: boolean; message: string }> => {
+  const response = await api.delete('/cloud/drive/oauth-credentials')
+  return response.data
+}
+
+export const startDriveAuth = async (): Promise<DriveAuthResponse> => {
+  const response = await api.post<DriveAuthResponse>('/cloud/drive/auth')
+  return response.data
+}
+
+export const verifyDriveAuth = async (code: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/cloud/drive/verify', { code })
+  return response.data
+}
+
+export const testDriveUpload = async (): Promise<DriveTestUploadResponse> => {
+  const response = await api.post<DriveTestUploadResponse>('/cloud/drive/test-upload')
+  return response.data
+}
+
+export const disconnectDrive = async (): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/cloud/drive/disconnect')
   return response.data
 }
