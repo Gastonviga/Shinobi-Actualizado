@@ -2,6 +2,26 @@
 # Sistema de Videovigilancia Empresarial
 
 services:
+  # PostgreSQL Database
+  # High-performance database for concurrent writes (replaces SQLite)
+  postgres:
+    image: postgres:15-alpine
+    container_name: titan-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: titan
+      POSTGRES_PASSWORD: titan_secure_2024
+      POSTGRES_DB: titannvr
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U titan -d titannvr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - titan-network
+
   # Motor de Video - Go2RTC
   # Convierte RTSP a WebRTC/MSE con latencia cero
   go2rtc:
@@ -32,18 +52,17 @@ services:
       - ./backend:/app
       - ./storage:/app/storage
       - ./config:/config  # For Frigate config generation
-      # Docker socket for container management (needed for Go2RTC restart)
-      # Linux/Mac: //var/run/docker.sock:/var/run/docker.sock
-      # Windows: //./pipe/docker_engine:/var/run/docker.sock
-      - //./pipe/docker_engine:/var/run/docker.sock
+      # Docker socket REMOVED - Go2RTC managed via HTTP API
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./storage/titannvr.db
+      - DATABASE_URL=postgresql+asyncpg://titan:titan_secure_2024@postgres:5432/titannvr
       - GO2RTC_URL=http://go2rtc:1984
-      - GO2RTC_CONTAINER=titan-go2rtc
       - DEBUG=true
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      - go2rtc
+      postgres:
+        condition: service_healthy
+      go2rtc:
+        condition: service_started
     networks:
       - titan-network
 
@@ -129,4 +148,6 @@ networks:
 
 volumes:
   storage:
+    driver: local
+  postgres_data:
     driver: local

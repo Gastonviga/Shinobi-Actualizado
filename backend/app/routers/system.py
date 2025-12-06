@@ -295,22 +295,14 @@ async def get_services_status(
     except Exception:
         services["mqtt"] = "offline"
     
-    # Try to get Docker container info
-    try:
-        import docker
-        client = docker.from_env()
-        for container in client.containers.list():
-            if "titan" in container.name.lower():
-                health = None
-                if container.attrs.get("State", {}).get("Health"):
-                    health = container.attrs["State"]["Health"].get("Status")
-                containers.append(DockerContainerStats(
-                    name=container.name,
-                    status=container.status,
-                    health=health
-                ))
-    except Exception as e:
-        logger.debug(f"Could not get Docker info: {e}")
+    # Container status is now inferred from service checks above
+    # Docker socket is no longer mounted for security reasons
+    containers = [
+        DockerContainerStats(name="titan-backend", status="running", health="healthy"),
+        DockerContainerStats(name="titan-go2rtc", status="running" if services["go2rtc"] == "online" else "unknown"),
+        DockerContainerStats(name="titan-frigate", status="running" if services["frigate"] == "online" else "unknown"),
+        DockerContainerStats(name="titan-mqtt", status="running" if services["mqtt"] == "online" else "unknown"),
+    ]
     
     return ServicesStatus(
         backend=services["backend"],

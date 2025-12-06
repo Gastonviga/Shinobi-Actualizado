@@ -4,7 +4,7 @@ Key-value store for system configuration and branding
 """
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy.types import JSON  # Compatible with PostgreSQL and SQLite
 from app.database import Base
 
 

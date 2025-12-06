@@ -177,8 +177,12 @@ async def sync_frigate_cameras():
     
     Regenerates frigate.yml with all active cameras and
     attempts to restart Frigate to apply changes.
+    
+    Use this endpoint to force regeneration if cameras are not showing in Frigate.
     """
     from app.services.config_generator import sync_frigate_config
+    import logging
+    logger = logging.getLogger(__name__)
     
     async with async_session_maker() as session:
         result = await session.execute(
@@ -186,15 +190,27 @@ async def sync_frigate_cameras():
         )
         cameras = result.scalars().all()
         
+        logger.info(f"Syncing {len(cameras)} active cameras to Frigate")
+        
+        # Include ALL enterprise settings for proper Frigate configuration
         camera_dicts = [
             {
                 "name": c.name,
                 "is_active": c.is_active,
                 "main_stream_url": c.main_stream_url,
                 "sub_stream_url": c.sub_stream_url,
+                # Enterprise settings
+                "retention_days": c.retention_days,
+                "recording_mode": c.recording_mode,
+                "event_retention_days": c.event_retention_days,
+                "zones_config": c.zones_config,
             }
             for c in cameras
         ]
         
+        for cam in camera_dicts:
+            logger.info(f"  - Camera: {cam['name']} (mode: {cam['recording_mode']})")
+        
         sync_result = await sync_frigate_config(camera_dicts, restart=True)
+        logger.info(f"Frigate sync result: {sync_result}")
         return sync_result

@@ -22,7 +22,9 @@ import {
   ExternalLink,
   Unlink,
   KeyRound,
-  Send
+  Send,
+  Edit2,
+  Lock
 } from 'lucide-react'
 import {
   Dialog,
@@ -36,6 +38,8 @@ import { Label } from '@/components/ui/label'
 import { 
   api, 
   type User,
+  type UserUpdate,
+  updateUser as updateUserApi,
   testSmtpConnection,
   saveSmtpConfig,
   getSmtpConfig,
@@ -106,6 +110,13 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [users, setUsers] = useState<User[]>([])
   const [showNewUser, setShowNewUser] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'viewer' })
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editUserData, setEditUserData] = useState<{ role: string; email: string; password: string; is_active: boolean }>({ 
+    role: 'viewer', 
+    email: '', 
+    password: '', 
+    is_active: true 
+  })
   
   // Notifications (SMTP) state
   const [smtpEmail, setSmtpEmail] = useState('')
@@ -283,6 +294,54 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } catch (err) {
       console.error('Failed to delete user:', err)
       setAlert({ type: 'error', message: 'Error al eliminar usuario' })
+    }
+  }
+
+  // Open edit modal for a user
+  const openEditUser = (userToEdit: User) => {
+    setEditingUser(userToEdit)
+    setEditUserData({
+      role: userToEdit.role,
+      email: userToEdit.email || '',
+      password: '',
+      is_active: userToEdit.is_active
+    })
+  }
+
+  // Update user
+  const handleUpdateUser = async () => {
+    if (!editingUser) return
+    
+    setIsSaving(true)
+    try {
+      const updateData: UserUpdate = {
+        role: editUserData.role as 'admin' | 'operator' | 'viewer',
+        email: editUserData.email || null,
+        is_active: editUserData.is_active
+      }
+      
+      // Only include password if provided
+      if (editUserData.password.trim()) {
+        updateData.password = editUserData.password
+      }
+      
+      await updateUserApi(editingUser.id, updateData)
+      
+      setAlert({ 
+        type: 'success', 
+        message: editUserData.password.trim() 
+          ? `Usuario "${editingUser.username}" actualizado con nueva contraseña`
+          : `Usuario "${editingUser.username}" actualizado`
+      })
+      
+      setEditingUser(null)
+      setEditUserData({ role: 'viewer', email: '', password: '', is_active: true })
+      loadData()
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Error al actualizar usuario'
+      setAlert({ type: 'error', message })
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -681,14 +740,26 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                           <p className="text-[10px] text-zinc-500">{ROLE_LABELS[user.role]}</p>
                         </div>
                       </div>
-                      {user.username !== 'admin' && (
+                      <div className="flex items-center gap-1">
+                        {/* Edit button - always visible except for own user */}
                         <button
-                          onClick={() => setDeleteConfirm({ userId: user.id, username: user.username })}
-                          className="p-2 rounded-full hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
+                          onClick={() => openEditUser(user)}
+                          className="p-2 rounded-full hover:bg-blue-500/10 text-zinc-500 hover:text-blue-400 transition-colors"
+                          title="Editar usuario"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Edit2 className="w-4 h-4" />
                         </button>
-                      )}
+                        {/* Delete button - not for admin user */}
+                        {user.username !== 'admin' && (
+                          <button
+                            onClick={() => setDeleteConfirm({ userId: user.id, username: user.username })}
+                            className="p-2 rounded-full hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
+                            title="Eliminar usuario"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -1115,6 +1186,131 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Eliminar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setEditingUser(null)}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-2 rounded-lg bg-blue-500/20">
+                <Edit2 className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-zinc-100">
+                  Editar Usuario
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  {editingUser.username}
+                </p>
+              </div>
+            </div>
+            
+            {/* Form */}
+            <div className="space-y-4">
+              {/* Role */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Rol</Label>
+                <select
+                  value={editUserData.role}
+                  onChange={(e) => setEditUserData(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full p-2.5 rounded-md bg-zinc-800 border border-zinc-700 text-sm text-zinc-200"
+                  disabled={editingUser.username === 'admin'}
+                >
+                  <option value="viewer">Visualizador</option>
+                  <option value="operator">Operador</option>
+                  <option value="admin">Administrador</option>
+                </select>
+                {editingUser.username === 'admin' && (
+                  <p className="text-[10px] text-amber-400">El usuario admin no puede cambiar de rol</p>
+                )}
+              </div>
+              
+              {/* Email */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-400">Email (opcional)</Label>
+                <Input
+                  type="email"
+                  placeholder="usuario@empresa.com"
+                  value={editUserData.email}
+                  onChange={(e) => setEditUserData(prev => ({ ...prev, email: e.target.value }))}
+                  className="bg-zinc-800 border-zinc-700"
+                />
+              </div>
+              
+              {/* Active Status */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 border border-zinc-700">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-zinc-500" />
+                  <span className="text-sm text-zinc-300">Usuario Activo</span>
+                </div>
+                <button
+                  onClick={() => setEditUserData(prev => ({ ...prev, is_active: !prev.is_active }))}
+                  disabled={editingUser.username === 'admin'}
+                  className={`w-10 h-6 rounded-full transition-colors relative ${
+                    editUserData.is_active ? 'bg-emerald-500' : 'bg-zinc-600'
+                  } ${editingUser.username === 'admin' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                    editUserData.is_active ? 'translate-x-5' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              
+              {/* Password Reset Section */}
+              <div className="pt-3 border-t border-zinc-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <Label className="text-xs text-amber-400 font-medium">Restablecer Contraseña</Label>
+                </div>
+                <Input
+                  type="password"
+                  placeholder="Dejar en blanco para no cambiar"
+                  value={editUserData.password}
+                  onChange={(e) => setEditUserData(prev => ({ ...prev, password: e.target.value }))}
+                  className="bg-zinc-800 border-zinc-700"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Si escribes una nueva contraseña, el usuario deberá usarla inmediatamente
+                </p>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="ghost"
+                onClick={() => setEditingUser(null)}
+                className="flex-1 text-zinc-400 hover:text-zinc-200"
+                disabled={isSaving}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUpdateUser}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar Cambios
+                  </>
+                )}
               </Button>
             </div>
           </div>

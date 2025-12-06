@@ -65,6 +65,7 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     receive_email_alerts: Optional[bool] = None
+    password: Optional[str] = None  # For admin password reset
 
 
 class PasswordChange(BaseModel):
@@ -249,6 +250,7 @@ async def create_user(
 
 @router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(
+    request: Request,
     user_id: int,
     user_data: UserUpdate,
     admin: User = Depends(require_admin),
@@ -264,17 +266,49 @@ async def update_user(
             detail="User not found"
         )
     
+    changes = []
+    
     if user_data.email is not None:
         user.email = user_data.email
+        changes.append("email")
     if user_data.role is not None:
         user.role = user_data.role
+        changes.append(f"role={user_data.role.value}")
     if user_data.is_active is not None:
         user.is_active = user_data.is_active
+        changes.append(f"active={user_data.is_active}")
     if user_data.receive_email_alerts is not None:
         user.receive_email_alerts = user_data.receive_email_alerts
+        changes.append("email_alerts")
+    
+    # Handle password reset by admin
+    password_reset = False
+    if user_data.password is not None and user_data.password.strip():
+        user.hashed_password = AuthService.get_password_hash(user_data.password)
+        password_reset = True
+        changes.append("password_reset")
     
     await db.commit()
     await db.refresh(user)
+    
+    # Log the update action
+    details = f"Updated user '{user.username}'"
+    if changes:
+        details += f": {', '.join(changes)}"
+    if password_reset:
+        details = f"Password reset for user '{user.username}'"
+        if len(changes) > 1:
+            details += f" + other changes: {', '.join(c for c in changes if c != 'password_reset')}"
+    
+    await log_action(
+        db=db,
+        user=admin,
+        action=AuditAction.USER_UPDATE,
+        details=details,
+        request=request,
+        resource_type="user",
+        resource_id=str(user.id)
+    )
     
     return UserResponse(
         id=user.id,

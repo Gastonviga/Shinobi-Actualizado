@@ -37,8 +37,14 @@ class FrigateConfigGenerator:
         self.frigate_url = FRIGATE_API_URL
         
     def _get_base_config(self) -> Dict[str, Any]:
-        """Get base Frigate configuration"""
+        """
+        Get base Frigate configuration.
+        Compatible with Frigate 0.14+
+        """
         return {
+            # Frigate version for config compatibility
+            "version": "0.14",
+            
             "mqtt": {
                 "enabled": True,
                 "host": "mqtt",
@@ -59,16 +65,21 @@ class FrigateConfigGenerator:
                 "width": 320,
                 "height": 320
             },
+            # Global record settings (can be overridden per camera)
             "record": {
                 "enabled": True,
                 "retain": {
                     "days": 7,
                     "mode": "motion"
                 },
-                "events": {
+                "alerts": {
                     "retain": {
-                        "default": 14,
-                        "mode": "active_objects"
+                        "days": 14
+                    }
+                },
+                "detections": {
+                    "retain": {
+                        "days": 14
                     }
                 }
             },
@@ -79,6 +90,10 @@ class FrigateConfigGenerator:
                 "retain": {
                     "default": 14
                 }
+            },
+            # Global detection settings
+            "detect": {
+                "enabled": True
             },
             "objects": {
                 "track": ["person", "car", "dog", "cat"],
@@ -93,7 +108,6 @@ class FrigateConfigGenerator:
                 "streams": {}
             },
             "ui": {
-                "live_mode": "mse",
                 "timezone": "America/Argentina/Buenos_Aires"
             },
             "logger": {
@@ -166,16 +180,21 @@ class FrigateConfigGenerator:
                 "height": detect_height,
                 "fps": detect_fps
             },
+            # Frigate 0.14+ record structure
             "record": {
                 "enabled": True,
                 "retain": {
                     "days": retention_days,
                     "mode": frigate_retain_mode
                 },
-                "events": {
+                "alerts": {
                     "retain": {
-                        "default": event_retention_days,
-                        "mode": "active_objects"
+                        "days": event_retention_days
+                    }
+                },
+                "detections": {
+                    "retain": {
+                        "days": event_retention_days
                     }
                 }
             },

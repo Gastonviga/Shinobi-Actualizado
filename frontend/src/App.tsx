@@ -12,6 +12,7 @@ import {
   Eye,
   Map
 } from 'lucide-react'
+import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
 import { SmartCameraCard } from '@/components/SmartCameraCard'
 import { AddCameraDialog } from '@/components/AddCameraDialog'
@@ -28,8 +29,9 @@ import {
   getAllCamerasStatus,
   getCameraGroups,
   type Camera as CameraType,
-  type ConnectionStatus
+  type CameraStatus
 } from '@/lib/api'
+import { MatrixContainer } from '@/components/VideoMatrix'
 import { ChevronLeft, ChevronRight, Filter, CheckSquare, Square, X, Trash2 } from 'lucide-react'
 
 function Dashboard() {
@@ -41,8 +43,9 @@ function Dashboard() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [editingCamera, setEditingCamera] = useState<CameraType | null>(null)
-  const [cameraStatuses, setCameraStatuses] = useState<Record<number, ConnectionStatus>>({})
+  const [cameraStatuses, setCameraStatuses] = useState<Record<number, CameraStatus>>({})
   const [activeView, setActiveView] = useState<'cameras' | 'recordings' | 'maps'>('cameras')
+  const [cameraViewMode, setCameraViewMode] = useState<'matrix' | 'list'>('matrix')
   
   // Filter and pagination state
   const [groups, setGroups] = useState<string[]>([])
@@ -93,9 +96,9 @@ function Dashboard() {
   const loadCameraStatuses = useCallback(async () => {
     try {
       const data = await getAllCamerasStatus()
-      const statusMap: Record<number, ConnectionStatus> = {}
+      const statusMap: Record<number, CameraStatus> = {}
       data.cameras.forEach(cam => {
-        statusMap[cam.camera_id] = cam.connection_status
+        statusMap[cam.camera_id] = cam
       })
       setCameraStatuses(statusMap)
     } catch (err) {
@@ -165,9 +168,9 @@ function Dashboard() {
   }, [loadCameras, loadCameraStatuses])
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Glassmorphic Header */}
-      <header className="h-14 sticky top-0 z-50 glass border-b border-zinc-800">
+      <header className="h-14 sticky top-0 z-50 glass border-b border-border">
         <div className="h-full flex items-center justify-between px-4">
           {/* Logo & Nav */}
           <div className="flex items-center gap-6">
@@ -181,7 +184,7 @@ function Dashboard() {
               ) : (
                 <Video className="h-6 w-6 text-blue-500" />
               )}
-              <span className="font-semibold text-zinc-100">
+              <span className="font-semibold text-foreground">
                 {settings?.system_title || 'TitanNVR'}
               </span>
             </div>
@@ -192,8 +195,8 @@ function Dashboard() {
                 onClick={() => setActiveView('cameras')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'cameras' 
-                    ? 'bg-zinc-800 text-zinc-100' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-secondary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Camera className="h-4 w-4 inline mr-1.5" />
@@ -203,8 +206,8 @@ function Dashboard() {
                 onClick={() => setActiveView('recordings')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'recordings' 
-                    ? 'bg-zinc-800 text-zinc-100' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-secondary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Film className="h-4 w-4 inline mr-1.5" />
@@ -214,8 +217,8 @@ function Dashboard() {
                 onClick={() => setActiveView('maps')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   activeView === 'maps' 
-                    ? 'bg-zinc-800 text-zinc-100' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-secondary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Map className="h-4 w-4 inline mr-1.5" />
@@ -232,7 +235,7 @@ function Dashboard() {
                 ? 'bg-red-600 text-white' 
                 : user?.role === 'operator' 
                   ? 'bg-blue-600 text-white' 
-                  : 'bg-zinc-600 text-zinc-200'
+                  : 'bg-muted text-muted-foreground'
             }`}>
               {user?.role === 'admin' && <Shield className="h-3.5 w-3.5" />}
               {user?.role === 'operator' && <UserCog className="h-3.5 w-3.5" />}
@@ -256,16 +259,19 @@ function Dashboard() {
             {isAdmin && (
               <button
                 onClick={() => setShowSettingsDialog(true)}
-                className="p-2 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               >
                 <Settings className="h-4 w-4" />
               </button>
             )}
             
+            {/* Theme Toggle */}
+            <ModeToggle />
+            
             {/* Logout */}
             <button
               onClick={logout}
-              className="p-2 rounded-md text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+              className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-secondary transition-colors"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -284,11 +290,11 @@ function Dashboard() {
             {/* Empty State */}
             {!camerasLoading && cameras.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[60vh]">
-                <Camera className="h-16 w-16 text-zinc-700 mb-4" />
-                <h2 className="text-lg font-medium text-zinc-300 mb-2">
+                <Camera className="h-16 w-16 text-muted-foreground mb-4" />
+                <h2 className="text-lg font-medium text-foreground mb-2">
                   No hay cámaras configuradas
                 </h2>
-                <p className="text-sm text-zinc-500 mb-4">
+                <p className="text-sm text-muted-foreground mb-4">
                   Agrega tu primera cámara para comenzar
                 </p>
                 {canEdit && (
@@ -307,13 +313,13 @@ function Dashboard() {
             {isSelectionMode && selectedCameras.size > 0 && (
               <div className="flex items-center justify-between mb-3 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
                 <div className="flex items-center gap-3">
-                  <CheckSquare className="h-5 w-5 text-red-400" />
-                  <span className="text-sm font-medium text-zinc-200">
+                  <CheckSquare className="h-5 w-5 text-destructive" />
+                  <span className="text-sm font-medium text-foreground">
                     {selectedCameras.size} cámara{selectedCameras.size !== 1 ? 's' : ''} seleccionada{selectedCameras.size !== 1 ? 's' : ''}
                   </span>
                   <button
                     onClick={selectAllCameras}
-                    className="text-xs text-zinc-400 hover:text-zinc-200 underline"
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
                   >
                     Seleccionar todas ({paginatedCameras.length})
                   </button>
@@ -339,41 +345,70 @@ function Dashboard() {
               </div>
             )}
 
-            {/* Filter Bar */}
+            {/* View Mode Toolbar */}
             {cameras.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3 mb-3 p-2 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-zinc-500" />
-                  <select
-                    value={selectedGroup}
-                    onChange={(e) => { setSelectedGroup(e.target.value); setCurrentPage(1) }}
-                    className="bg-zinc-800 border border-zinc-700 rounded-md px-2 py-1 text-sm text-zinc-200"
+              <div className="flex flex-wrap items-center gap-3 mb-3 p-2 bg-secondary/50 rounded-lg border border-border">
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-1 p-1 rounded-md bg-secondary border border-border">
+                  <button
+                    onClick={() => setCameraViewMode('matrix')}
+                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                      cameraViewMode === 'matrix' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
                   >
-                    <option value="">Todos los grupos</option>
-                    {groups.map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
+                    Matrix
+                  </button>
+                  <button
+                    onClick={() => setCameraViewMode('list')}
+                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                      cameraViewMode === 'list' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Lista
+                  </button>
                 </div>
                 
-                <div className="flex items-center gap-2 text-sm text-zinc-400">
-                  <span>Mostrar:</span>
-                  <select
-                    value={viewLimit}
-                    onChange={(e) => { setViewLimit(Number(e.target.value)); setCurrentPage(1) }}
-                    className="bg-zinc-800 border border-zinc-700 rounded-md px-2 py-1 text-zinc-200"
-                  >
-                    <option value={4}>4</option>
-                    <option value={8}>8</option>
-                    <option value={12}>12</option>
-                    <option value={16}>16</option>
-                  </select>
-                </div>
+                {/* List View Filters - Only show in list mode */}
+                {cameraViewMode === 'list' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <select
+                        value={selectedGroup}
+                        onChange={(e) => { setSelectedGroup(e.target.value); setCurrentPage(1) }}
+                        className="bg-secondary border border-border rounded-md px-2 py-1 text-sm text-foreground"
+                      >
+                        <option value="">Todos los grupos</option>
+                        {groups.map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>Mostrar:</span>
+                      <select
+                        value={viewLimit}
+                        onChange={(e) => { setViewLimit(Number(e.target.value)); setCurrentPage(1) }}
+                        className="bg-secondary border border-border rounded-md px-2 py-1 text-foreground"
+                      >
+                        <option value={4}>4</option>
+                        <option value={8}>8</option>
+                        <option value={12}>12</option>
+                        <option value={16}>16</option>
+                      </select>
+                    </div>
+                  </>
+                )}
                 
                 <div className="flex-1" />
                 
-                {/* Selection Mode Toggle */}
-                {canEdit && (
+                {/* Selection Mode Toggle - Only in list mode */}
+                {canEdit && cameraViewMode === 'list' && (
                   <Button
                     variant={isSelectionMode ? "default" : "outline"}
                     size="sm"
@@ -389,58 +424,69 @@ function Dashboard() {
                   </Button>
                 )}
                 
-                <span className="text-xs text-zinc-500">
-                  {filteredCameras.length} cámaras
-                  {selectedGroup && ` en "${selectedGroup}"`}
+                <span className="text-xs text-muted-foreground">
+                  {cameras.length} cámaras
+                  {cameraViewMode === 'list' && selectedGroup && ` • "${selectedGroup}"`}
                 </span>
               </div>
             )}
 
-            {/* Camera Grid - Frigate style (compact) */}
-            {cameras.length > 0 && (
-              <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                {paginatedCameras.map((camera) => (
-                  <SmartCameraCard
-                    key={camera.id}
-                    camera={camera}
-                    connectionStatus={cameraStatuses[camera.id]}
-                    onDelete={handleDeleteCamera}
-                    onEdit={canEdit ? (cam) => setEditingCamera(cam) : undefined}
-                    selectionMode={isSelectionMode}
-                    isSelected={selectedCameras.has(camera.id)}
-                    onSelect={toggleCameraSelection}
-                  />
-                ))}
-              </div>
+            {/* Matrix View - Smart Video Matrix */}
+            {cameras.length > 0 && cameraViewMode === 'matrix' && (
+              <MatrixContainer
+                availableCameras={cameras}
+                camerasStatus={cameraStatuses}
+                onEditCamera={canEdit ? (cam) => setEditingCamera(cam) : undefined}
+              />
             )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-4">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <span className="text-sm text-zinc-400">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
+            {/* List View - Traditional Grid */}
+            {cameras.length > 0 && cameraViewMode === 'list' && (
+              <>
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {paginatedCameras.map((camera) => (
+                    <SmartCameraCard
+                      key={camera.id}
+                      camera={camera}
+                      connectionStatus={cameraStatuses[camera.id]?.connection_status}
+                      onDelete={handleDeleteCamera}
+                      onEdit={canEdit ? (cam) => setEditingCamera(cam) : undefined}
+                      selectionMode={isSelectionMode}
+                      isSelected={selectedCameras.has(camera.id)}
+                      onSelect={toggleCameraSelection}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-md bg-secondary text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-md bg-secondary text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Loading */}
             {camerasLoading && cameras.length === 0 && (
               <div className="flex items-center justify-center h-[60vh]">
-                <Loader2 className="h-8 w-8 animate-spin text-zinc-600" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
             )}
           </>
@@ -448,7 +494,7 @@ function Dashboard() {
       </main>
 
       {/* Minimal Footer */}
-      <footer className="h-8 flex items-center justify-center text-[10px] text-zinc-600 border-t border-zinc-900">
+      <footer className="h-8 flex items-center justify-center text-[10px] text-muted-foreground border-t border-border">
         <span>{cameras.length} cámaras • TitanNVR Enterprise v2.0</span>
       </footer>
 
@@ -478,28 +524,28 @@ function Dashboard() {
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowBulkDeleteConfirm(false)}
           />
-          <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
             <div className="flex justify-center mb-4">
               <div className="p-3 rounded-full bg-red-500/10">
                 <Trash2 className="w-8 h-8 text-red-500" />
               </div>
             </div>
-            <h3 className="text-lg font-semibold text-center text-zinc-100 mb-2">
+            <h3 className="text-lg font-semibold text-center text-foreground mb-2">
               Eliminar {selectedCameras.size} Cámaras
             </h3>
-            <p className="text-sm text-zinc-400 text-center mb-4">
+            <p className="text-sm text-muted-foreground text-center mb-4">
               ¿Estás seguro de eliminar <span className="font-medium text-red-400">{selectedCameras.size}</span> cámaras? 
               Se eliminarán de la base de datos, Go2RTC y Frigate.
             </p>
-            <div className="max-h-32 overflow-y-auto mb-4 p-2 bg-zinc-800/50 rounded-lg text-xs">
+            <div className="max-h-32 overflow-y-auto mb-4 p-2 bg-secondary/50 rounded-lg text-xs">
               {cameras
                 .filter(c => selectedCameras.has(c.id))
                 .slice(0, 5)
                 .map((camera) => (
-                  <div key={camera.id} className="truncate text-zinc-400">{camera.name}</div>
+                  <div key={camera.id} className="truncate text-muted-foreground">{camera.name}</div>
                 ))}
               {selectedCameras.size > 5 && (
-                <div className="text-zinc-500 mt-1">
+                <div className="text-muted-foreground mt-1">
                   ...y {selectedCameras.size - 5} más
                 </div>
               )}

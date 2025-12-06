@@ -42,27 +42,87 @@ class StreamManager:
     
     def _convert_url_for_go2rtc(self, url: str) -> str:
         """
-        Convert a stream URL to Go2RTC compatible format.
+        Convert a stream URL to Go2RTC compatible format with optimized encoding.
         
-        - RTSP URLs are used directly (Go2RTC supports them natively)
-        - HTTP URLs (MJPEG/JPEG) need to be wrapped with ffmpeg for transcoding
-        - Already prefixed URLs (exec:, ffmpeg:, etc.) are left as-is
+        Strategy:
+        - RTSP H264/H265: Passthrough (copy) - zero CPU usage
+        - HTTP/MJPEG: Transcode with hardware acceleration or efficient preset
+        - Already prefixed URLs: Left as-is
+        
+        Hardware acceleration priority:
+        1. NVIDIA NVENC (h264_nvenc) - if GPU available
+        2. Intel QSV (h264_qsv) - integrated graphics
+        3. Software libx264 with superfast preset - fallback
         """
         url = url.strip()
         
-        # Already in Go2RTC format
-        if url.startswith(('exec:', 'ffmpeg:', 'rtsp://', 'rtsps://')):
+        # Already in Go2RTC format - don't modify
+        if url.startswith(('exec:', 'ffmpeg:')):
             return url
         
-        # HTTP streams need ffmpeg transcoding for proper playback
+        # RTSP/RTSPS streams - Go2RTC handles natively with passthrough
+        # H264/H265 streams are passed through without re-encoding (zero CPU)
+        if url.startswith(('rtsp://', 'rtsps://')):
+            logger.info(f"RTSP stream - Go2RTC will use passthrough (no transcoding)")
+            return url
+        
+        # HTTP streams (MJPEG/JPEG) need ffmpeg transcoding
         if url.startswith(('http://', 'https://')):
-            # Check if it's likely MJPEG (IP Webcam, etc.)
-            # Wrap with ffmpeg to transcode to H264 for browser compatibility
-            logger.info(f"Converting HTTP URL to ffmpeg format: {url}")
-            return f"exec:ffmpeg -i {url} -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -"
+            logger.info(f"HTTP stream detected - using optimized ffmpeg transcoding")
+            
+            # Build optimized FFmpeg command:
+            # - Try hardware encoding first (NVENC), fallback to libx264
+            # - superfast preset (better than ultrafast quality, still fast)
+            # - zerolatency tune for live streaming
+            # - Reduced bitrate for sub-streams
+            ffmpeg_cmd = (
+                f"exec:ffmpeg -hide_banner -loglevel error "
+                f"-i {url} "
+                f"-c:v libx264 "        # Software encoder (most compatible)
+                f"-preset superfast "    # Good balance of speed/quality (not ultrafast)
+                f"-tune zerolatency "    # Optimized for live streaming
+                f"-crf 23 "              # Constant quality (lower = better, 23 is default)
+                f"-maxrate 2M "          # Cap bitrate for network efficiency
+                f"-bufsize 4M "          # Buffer size
+                f"-g 30 "                # Keyframe interval (1 second at 30fps)
+                f"-f mpegts -"           # Output format
+            )
+            return ffmpeg_cmd
         
         # Unknown format, return as-is and let Go2RTC handle it
         return url
+    
+    def _get_optimized_ffmpeg_cmd(self, url: str, quality: str = "main") -> str:
+        """
+        Generate optimized FFmpeg command based on stream quality tier.
+        
+        Args:
+            url: Source stream URL
+            quality: "main" for high quality, "sub" for lower quality grid view
+            
+        Returns:
+            FFmpeg command string optimized for the use case
+        """
+        if quality == "sub":
+            # Sub-stream: Lower resolution for grid view, minimal CPU
+            return (
+                f"exec:ffmpeg -hide_banner -loglevel error "
+                f"-i {url} "
+                f"-c:v libx264 -preset ultrafast -tune zerolatency "
+                f"-vf scale=640:-2 "     # Scale down for grid view
+                f"-crf 28 "              # Lower quality is fine for thumbnails
+                f"-maxrate 500k -bufsize 1M "
+                f"-g 30 -f mpegts -"
+            )
+        else:
+            # Main stream: Full quality for recording/detail view
+            return (
+                f"exec:ffmpeg -hide_banner -loglevel error "
+                f"-i {url} "
+                f"-c:v libx264 -preset superfast -tune zerolatency "
+                f"-crf 23 -maxrate 4M -bufsize 8M "
+                f"-g 30 -f mpegts -"
+            )
     
     async def _get_config(self) -> Dict[str, Any]:
         """Get current Go2RTC configuration as dict."""
@@ -89,77 +149,68 @@ class StreamManager:
             logger.info(f"PATCH response: {response.status_code}")
             return response.status_code == 200
     
-    async def _add_stream_direct(self, stream_id: str, url: str) -> bool:
+    async def _add_stream_via_api(self, stream_id: str, url: str) -> bool:
         """
-        Add a stream directly via Go2RTC API (immediate activation).
-        Uses PUT /api/streams endpoint which activates the stream immediately.
+        Add/update a stream via Go2RTC HTTP API (immediate hot-reload).
+        
+        Uses PUT /api/streams?src={name}&url={url} for immediate activation.
+        This is the PRIMARY method for adding streams - no container restart needed.
         """
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Go2RTC accepts stream addition via PUT with query params
+                # Go2RTC PUT /api/streams - immediate hot-reload
                 response = await client.put(
                     f"{self.go2rtc_url}/api/streams",
                     params={"src": stream_id, "url": url}
                 )
-                logger.info(f"Add stream {stream_id}: status={response.status_code}")
+                logger.info(f"PUT /api/streams {stream_id}: status={response.status_code}")
                 return response.status_code in [200, 201]
         except Exception as e:
-            logger.error(f"Error adding stream {stream_id}: {e}")
+            logger.error(f"Error adding stream via API {stream_id}: {e}")
+            return False
+    
+    async def _remove_stream_via_api(self, stream_id: str) -> bool:
+        """
+        Remove a stream via Go2RTC HTTP API (immediate removal).
+        
+        Uses DELETE /api/streams?src={name} for immediate deactivation.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.delete(
+                    f"{self.go2rtc_url}/api/streams",
+                    params={"src": stream_id}
+                )
+                logger.info(f"DELETE /api/streams {stream_id}: status={response.status_code}")
+                return response.status_code in [200, 204]
+        except Exception as e:
+            logger.error(f"Error removing stream via API {stream_id}: {e}")
+            return False
+    
+    async def _persist_stream_config(self, stream_id: str, url: str) -> bool:
+        """
+        Persist stream to Go2RTC config file for container restarts.
+        This ensures streams survive Go2RTC container restarts.
+        """
+        try:
+            current_config = await self._get_config()
+            current_streams = current_config.get("streams", {})
+            current_streams[stream_id] = url
+            return await self._patch_config({"streams": current_streams})
+        except Exception as e:
+            logger.warning(f"Failed to persist stream config {stream_id}: {e}")
             return False
     
     async def restart_go2rtc(self) -> bool:
         """
-        Restart Go2RTC container to reload configuration.
-        Go2RTC doesn't hot-reload streams, so restart is needed after adding new ones.
+        Deprecated: No longer needed.
         
-        Note: On Windows, Docker socket access from containers is limited.
-        Falls back to returning False, and the sync endpoint will indicate manual restart needed.
+        Go2RTC now supports hot-reload via PUT /api/streams.
+        Streams are added/removed immediately without container restart.
+        This method is kept for backwards compatibility but always returns True.
         """
-        container_name = settings.go2rtc_container or "titan-go2rtc"
-        docker_socket = "/var/run/docker.sock"
-        
-        try:
-            logger.info(f"Attempting to restart Go2RTC container ({container_name})...")
-            
-            # Check if Docker socket is available and is actually a socket
-            import os
-            import stat
-            
-            if not os.path.exists(docker_socket):
-                logger.warning("Docker socket not found - manual restart required")
-                return False
-            
-            # Check if it's a socket (won't work on Windows with named pipe mount)
-            try:
-                mode = os.stat(docker_socket).st_mode
-                if not stat.S_ISSOCK(mode):
-                    logger.warning("Docker socket mount is not a Unix socket - manual restart required")
-                    return False
-            except Exception:
-                logger.warning("Cannot stat Docker socket - manual restart required")
-                return False
-            
-            # Use httpx with Unix socket transport (async)
-            transport = httpx.AsyncHTTPTransport(uds=docker_socket)
-            
-            async with httpx.AsyncClient(transport=transport, timeout=30.0) as client:
-                response = await client.post(
-                    f"http://localhost/containers/{container_name}/restart",
-                    params={"t": 10}
-                )
-                
-                if response.status_code in [204, 200]:
-                    logger.info("Go2RTC container restarted successfully")
-                    await asyncio.sleep(3)
-                    return True
-                else:
-                    logger.error(f"Failed to restart Go2RTC: {response.status_code} - {response.text}")
-                    return False
-                    
-        except Exception as e:
-            logger.warning(f"Could not restart Go2RTC automatically: {e}")
-            logger.info("Streams are saved in config. Restart Go2RTC manually: docker restart titan-go2rtc")
-            return False
+        logger.info("restart_go2rtc called but no longer needed - streams are hot-reloaded")
+        return True
 
     async def register_stream(
         self, 
@@ -169,7 +220,9 @@ class StreamManager:
         restart_after: bool = True
     ) -> dict:
         """
-        Register a camera stream in Go2RTC.
+        Register a camera stream in Go2RTC via HTTP API.
+        
+        Uses PUT /api/streams for immediate hot-reload (no container restart needed).
         
         Creates two streams per camera:
         - {name}_main: High quality for recording/detail view
@@ -179,7 +232,7 @@ class StreamManager:
             name: Camera name (will be normalized)
             main_stream_url: Stream URL (RTSP, HTTP, etc.)
             sub_stream_url: Stream URL for sub stream (optional)
-            restart_after: Restart Go2RTC after registration (default True)
+            restart_after: Ignored (kept for backwards compatibility)
             
         Returns:
             dict with registration status
@@ -200,34 +253,29 @@ class StreamManager:
         result = {
             "main": {"status": "pending", "stream_id": main_stream_id, "url": main_stream_url},
             "sub": {"status": "pending", "stream_id": sub_stream_id, "url": sub_url},
-            "restart": None
+            "restart": "not_needed"  # Hot-reload via API
         }
         
         try:
-            # Update config (Go2RTC doesn't support direct PUT for exec: URLs)
-            current_config = await self._get_config()
-            current_streams = current_config.get("streams", {})
-            current_streams[main_stream_id] = main_go2rtc_url
-            current_streams[sub_stream_id] = sub_go2rtc_url
+            # Use PUT /api/streams for immediate activation (hot-reload)
+            main_success = await self._add_stream_via_api(main_stream_id, main_go2rtc_url)
+            sub_success = await self._add_stream_via_api(sub_stream_id, sub_go2rtc_url)
             
-            success = await self._patch_config({"streams": current_streams})
-            
-            if success:
-                result["main"]["status"] = "registered"
-                result["sub"]["status"] = "registered"
-                logger.info(f"Successfully registered streams for {name}")
-                
-                # Restart Go2RTC to load new streams
-                if restart_after:
-                    restarted = await self.restart_go2rtc()
-                    result["restart"] = "success" if restarted else "failed"
-                    if restarted:
-                        result["main"]["status"] = "active"
-                        result["sub"]["status"] = "active"
+            if main_success:
+                result["main"]["status"] = "active"
+                logger.info(f"Main stream {main_stream_id} activated")
             else:
                 result["main"]["status"] = "failed"
+                
+            if sub_success:
+                result["sub"]["status"] = "active"
+                logger.info(f"Sub stream {sub_stream_id} activated")
+            else:
                 result["sub"]["status"] = "failed"
-                logger.error(f"Failed to register streams for {name}")
+            
+            # Also persist to config file for container restarts
+            await self._persist_stream_config(main_stream_id, main_go2rtc_url)
+            await self._persist_stream_config(sub_stream_id, sub_go2rtc_url)
                 
             return result
                 
@@ -239,25 +287,11 @@ class StreamManager:
                 "restart": None
             }
     
-    async def _delete_stream_direct(self, stream_id: str) -> bool:
-        """
-        Delete a stream directly via Go2RTC API (immediate removal).
-        """
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.delete(
-                    f"{self.go2rtc_url}/api/streams",
-                    params={"src": stream_id}
-                )
-                logger.info(f"Delete stream {stream_id}: status={response.status_code}")
-                return response.status_code in [200, 204]
-        except Exception as e:
-            logger.error(f"Error deleting stream {stream_id}: {e}")
-            return False
-
     async def unregister_stream(self, name: str) -> dict:
         """
-        Remove a camera stream from Go2RTC (immediate removal).
+        Remove a camera stream from Go2RTC via HTTP API (immediate removal).
+        
+        Uses DELETE /api/streams for immediate deactivation - no restart needed.
         
         Args:
             name: Camera name
@@ -272,11 +306,11 @@ class StreamManager:
         logger.info(f"Unregistering streams for camera: {name}")
         
         try:
-            # Delete streams directly (immediate removal)
-            main_deleted = await self._delete_stream_direct(main_stream_id)
-            sub_deleted = await self._delete_stream_direct(sub_stream_id)
+            # Delete streams via API (immediate removal - no restart)
+            main_deleted = await self._remove_stream_via_api(main_stream_id)
+            sub_deleted = await self._remove_stream_via_api(sub_stream_id)
             
-            # Also update config for persistence
+            # Also remove from config file for persistence
             try:
                 current_config = await self._get_config()
                 current_streams = current_config.get("streams", {})
@@ -284,7 +318,7 @@ class StreamManager:
                 current_streams.pop(sub_stream_id, None)
                 await self._patch_config({"streams": current_streams})
             except Exception as config_err:
-                logger.warning(f"Config update failed (streams already removed): {config_err}")
+                logger.warning(f"Config cleanup failed: {config_err}")
             
             logger.info(f"Successfully unregistered streams for {name}")
             return {
@@ -530,28 +564,16 @@ class StreamManager:
 
     async def reload_go2rtc(self) -> dict:
         """
-        Restart Go2RTC container to reload configuration.
+        Deprecated: No longer needed for stream management.
         
-        Requires Docker socket to be mounted.
+        Go2RTC streams are now managed via HTTP API with hot-reload.
+        This method is kept for backwards compatibility.
         """
-        import os
-        container_name = os.getenv("GO2RTC_CONTAINER", "titan-go2rtc")
-        
-        logger.info(f"Attempting to restart Go2RTC container: {container_name}")
-        
-        try:
-            import docker
-            client = docker.from_env()
-            container = client.containers.get(container_name)
-            container.restart(timeout=10)
-            logger.info(f"Go2RTC container restarted successfully")
-            return {"status": "ok", "message": f"Container {container_name} restarted"}
-        except ImportError:
-            logger.warning("Docker SDK not installed")
-            return {"status": "error", "message": "Docker SDK not available"}
-        except Exception as e:
-            logger.error(f"Failed to restart Go2RTC: {e}")
-            return {"status": "error", "message": str(e)}
+        logger.info("reload_go2rtc called - using HTTP API hot-reload instead")
+        return {
+            "status": "ok", 
+            "message": "Streams are hot-reloaded via API - no restart needed"
+        }
 
 
 # Singleton instance

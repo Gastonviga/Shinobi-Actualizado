@@ -2,30 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TitanNVR Enterprise - Dark Native Theme */
+/* TitanNVR Enterprise - Slate/Zinc Professional Theme */
 @layer base {
+  /* Light Mode (Default) */
   :root {
-    /* Force dark mode always */
-    --background: 0 0% 4%;
-    --foreground: 0 0% 95%;
-    --card: 0 0% 6%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 8%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 210 100% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%;
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 15%;
-    --input: 0 0% 12%;
-    --ring: 210 100% 50%;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
     --radius: 0.5rem;
+  }
+
+  /* Dark Mode */
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
   }
 }
 
@@ -33,41 +56,37 @@
   * {
     @apply border-border;
   }
-  
-  html {
-    color-scheme: dark;
-  }
-  
+
   body {
-    @apply bg-zinc-950 text-zinc-100 antialiased;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  
-  /* Scrollbar styling */
+
+  /* Scrollbar styling - adapts to theme */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  
+
   ::-webkit-scrollbar-track {
     @apply bg-transparent;
   }
-  
+
   ::-webkit-scrollbar-thumb {
-    @apply bg-zinc-700 rounded-full;
+    @apply bg-muted-foreground/30 rounded-full;
   }
-  
+
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-zinc-600;
+    @apply bg-muted-foreground/50;
   }
 }
 
 @layer components {
-  /* Glass effect for overlays */
+  /* Glass effect for overlays - adapts to theme */
   .glass {
-    @apply bg-black/50 backdrop-blur-md;
+    @apply bg-background/80 backdrop-blur-md border-b border-border;
   }
-  
+
   /* Live indicator pulse */
   .live-pulse {
     @apply animate-pulse;

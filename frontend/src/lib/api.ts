@@ -114,6 +114,14 @@ export interface User {
   receive_email_alerts: boolean
 }
 
+export interface UserUpdate {
+  email?: string | null
+  role?: 'admin' | 'operator' | 'viewer'
+  is_active?: boolean
+  receive_email_alerts?: boolean
+  password?: string  // For admin password reset (leave empty to not change)
+}
+
 export interface LoginResponse {
   access_token: string
   token_type: string
@@ -230,6 +238,29 @@ export const getStoredUser = (): User | null => {
 
 export const isAuthenticated = (): boolean => {
   return !!localStorage.getItem('titan_token')
+}
+
+// ============================================================
+// User Management API (Admin)
+// ============================================================
+
+export const getUsers = async (): Promise<User[]> => {
+  const response = await api.get<User[]>('/auth/users')
+  return response.data
+}
+
+export const createUser = async (data: { username: string; password: string; email?: string; role?: string }): Promise<User> => {
+  const response = await api.post<User>('/auth/users', data)
+  return response.data
+}
+
+export const updateUser = async (id: number, data: UserUpdate): Promise<User> => {
+  const response = await api.put<User>(`/auth/users/${id}`, data)
+  return response.data
+}
+
+export const deleteUser = async (id: number): Promise<void> => {
+  await api.delete(`/auth/users/${id}`)
 }
 
 // ============================================================

@@ -5,7 +5,7 @@ Enterprise v2.0 with advanced recording configuration
 import enum
 from sqlalchemy import String, Boolean, DateTime, Integer, Enum, Text, Float, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.sqlite import JSON
+from sqlalchemy.types import JSON  # Compatible with PostgreSQL and SQLite
 from datetime import datetime
 from typing import Optional
 
