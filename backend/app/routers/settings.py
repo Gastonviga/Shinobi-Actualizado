@@ -20,10 +20,30 @@ from app.services.auth import get_current_user_required, require_admin
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-# Storage paths
-BRANDING_DIR = Path("/app/storage/branding")
+# Storage paths - detect if running in Docker or locally
+import os
+
+def get_storage_base() -> Path:
+    """Get the base storage path based on environment."""
+    # Check if running in Docker (path /app exists)
+    if Path("/app/storage").exists():
+        return Path("/app/storage")
+    
+    # Running locally - use project root /storage folder
+    # Path: backend/app/routers/settings.py -> go up 4 levels to project root
+    project_root = Path(__file__).parent.parent.parent.parent
+    local_storage = project_root / "storage"
+    local_storage.mkdir(parents=True, exist_ok=True)
+    return local_storage
+
+STORAGE_BASE = get_storage_base()
+BRANDING_DIR = STORAGE_BASE / "branding"
 LOGO_PATH = BRANDING_DIR / "logo.png"
 MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
+
+# Log the resolved path for debugging
+logger.info(f"Storage base path: {STORAGE_BASE}")
+logger.info(f"Logo path: {LOGO_PATH}")
 
 
 # ============================================================
@@ -152,12 +172,15 @@ async def upload_logo(
     
     # Create directory if not exists
     BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Saving logo to: {LOGO_PATH}")
     
     # Save file
     with open(LOGO_PATH, "wb") as f:
         f.write(contents)
     
-    # Update setting in DB
+    logger.info(f"Logo saved successfully. File exists: {LOGO_PATH.exists()}, Size: {LOGO_PATH.stat().st_size if LOGO_PATH.exists() else 0} bytes")
+    
+    # Update setting in DB (create if doesn't exist)
     result = await db.execute(
         select(SystemSettings).where(SystemSettings.key == "logo_url")
     )
@@ -165,7 +188,16 @@ async def upload_logo(
     
     if setting:
         setting.value = "/api/settings/logo"
-        await db.commit()
+    else:
+        # Create the setting if it doesn't exist
+        setting = SystemSettings(
+            key="logo_url",
+            value="/api/settings/logo",
+            description="Custom logo URL"
+        )
+        db.add(setting)
+    
+    await db.commit()
     
     logger.info(f"Logo uploaded by {admin.username}")
     

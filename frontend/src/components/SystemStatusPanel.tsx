@@ -18,6 +18,7 @@ import {
   type SystemHealth,
   type ServicesStatus
 } from '@/lib/api'
+import { BackupManager } from '@/components/BackupManager'
 
 interface SystemStatusPanelProps {
   isAdmin: boolean
@@ -347,6 +348,13 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
         <Activity className="w-3 h-3" />
         <span>Última actualización: {new Date(stats.timestamp).toLocaleTimeString()}</span>
       </div>
+      
+      {/* Backup Section (Admin only) */}
+      {isAdmin && (
+        <div className="pt-6 mt-6 border-t border-zinc-700/50">
+          <BackupManager />
+        </div>
+      )}
     </div>
   )
 }

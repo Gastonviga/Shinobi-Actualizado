@@ -18,15 +18,11 @@ export default defineConfig({
     },
     proxy: {
       // Proxy API requests to backend
+      // Use localhost:8000 for local dev, backend:8000 for Docker
       '/api': {
-        target: 'http://backend:8000',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,
-        // Fallback to localhost when running outside Docker
-        configure: (proxy) => {
-          proxy.on('error', () => {
-            console.log('Proxy error, trying localhost...')
-          })
-        },
+        secure: false,
       },
     },
   },

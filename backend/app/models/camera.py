@@ -3,13 +3,16 @@ TitanNVR - Camera Model
 Enterprise v2.0 with advanced recording configuration
 """
 import enum
-from sqlalchemy import String, Boolean, DateTime, Integer, Enum, Text, Float, ForeignKey, func
+from sqlalchemy import String, Boolean, DateTime, Integer, Enum, Text, Float, ForeignKey, Time, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON  # Compatible with PostgreSQL and SQLite
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, time
+from typing import Optional, List, TYPE_CHECKING
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class RecordingMode(str, enum.Enum):
@@ -17,6 +20,7 @@ class RecordingMode(str, enum.Enum):
     CONTINUOUS = "continuous"  # 24/7 recording, maximum storage usage
     MOTION = "motion"          # Record only when motion detected
     EVENTS = "events"          # Record only on AI detection (person, car, etc.)
+    NONE = "none"              # No recording (schedule only)
 
 
 class Camera(Base):
@@ -94,5 +98,62 @@ class Camera(Base):
         onupdate=func.now()
     )
     
+    # Relationship to schedules
+    schedules: Mapped[List["CameraSchedule"]] = relationship(
+        "CameraSchedule",
+        back_populates="camera",
+        cascade="all, delete-orphan"
+    )
+    
+    # Users who have access to this camera (inverse of User.allowed_cameras)
+    allowed_users: Mapped[List["User"]] = relationship(
+        "User",
+        secondary="user_cameras",
+        back_populates="allowed_cameras"
+    )
+    
     def __repr__(self) -> str:
         return f"<Camera(id={self.id}, name='{self.name}', mode={self.recording_mode})>"
+
+
+class CameraSchedule(Base):
+    """
+    Camera recording schedule.
+    
+    Defines time-based recording modes for each camera.
+    Example: Monday-Friday 08:00-18:00 = Continuous, rest = Motion
+    """
+    __tablename__ = "camera_schedules"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    camera_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("cameras.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    
+    # Day of week: 0=Monday, 1=Tuesday, ..., 6=Sunday
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    # Time range
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    
+    # Recording mode for this time slot
+    mode: Mapped[RecordingMode] = mapped_column(
+        Enum(RecordingMode),
+        default=RecordingMode.MOTION,
+        nullable=False
+    )
+    
+    # Relationship back to camera
+    camera: Mapped["Camera"] = relationship("Camera", back_populates="schedules")
+    
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+    
+    def __repr__(self) -> str:
+        return f"<CameraSchedule(camera_id={self.camera_id}, day={self.day_of_week}, {self.start_time}-{self.end_time}, mode={self.mode})>"

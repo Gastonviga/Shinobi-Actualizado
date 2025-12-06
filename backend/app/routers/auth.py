@@ -12,7 +12,8 @@ from pydantic import BaseModel, EmailStr
 import logging
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, user_cameras
+from app.models.camera import Camera
 from app.models.audit import AuditAction
 from app.routers.audit import log_action
 from app.services.auth import (
@@ -361,3 +362,145 @@ async def delete_user(
     await db.commit()
     
     return {"message": f"User {username} deleted"}
+
+
+# ============================================================
+# User Camera Permissions (Admin only)
+# ============================================================
+
+class UserPermissionsUpdate(BaseModel):
+    """Schema for updating user camera permissions."""
+    camera_ids: List[int]
+
+
+class UserPermissionsResponse(BaseModel):
+    """Response with user's camera permissions."""
+    user_id: int
+    username: str
+    role: str
+    camera_ids: List[int]
+    camera_names: List[str]
+
+
+@router.get("/users/{user_id}/permissions", response_model=UserPermissionsResponse)
+async def get_user_permissions(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get camera permissions for a user (admin only).
+    
+    Returns list of camera IDs the user can access.
+    Note: Admins have implicit access to all cameras.
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # For admins, return all cameras
+    if user.role == UserRole.ADMIN:
+        cameras_result = await db.execute(select(Camera))
+        all_cameras = cameras_result.scalars().all()
+        return UserPermissionsResponse(
+            user_id=user.id,
+            username=user.username,
+            role=user.role.value,
+            camera_ids=[c.id for c in all_cameras],
+            camera_names=[c.name for c in all_cameras]
+        )
+    
+    return UserPermissionsResponse(
+        user_id=user.id,
+        username=user.username,
+        role=user.role.value,
+        camera_ids=[c.id for c in user.allowed_cameras],
+        camera_names=[c.name for c in user.allowed_cameras]
+    )
+
+
+@router.put("/users/{user_id}/permissions", response_model=UserPermissionsResponse)
+async def update_user_permissions(
+    request: Request,
+    user_id: int,
+    permissions: UserPermissionsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update camera permissions for a user (admin only).
+    
+    Replaces all current permissions with the new list.
+    Pass empty list to revoke all access.
+    
+    Note: Cannot modify permissions for admin users (they have full access).
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Cannot modify admin permissions
+    if user.role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot modify permissions for admin users - they have full access"
+        )
+    
+    # Validate camera IDs exist
+    if permissions.camera_ids:
+        cameras_result = await db.execute(
+            select(Camera).where(Camera.id.in_(permissions.camera_ids))
+        )
+        valid_cameras = cameras_result.scalars().all()
+        valid_ids = {c.id for c in valid_cameras}
+        
+        invalid_ids = set(permissions.camera_ids) - valid_ids
+        if invalid_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid camera IDs: {list(invalid_ids)}"
+            )
+    else:
+        valid_cameras = []
+    
+    # Clear existing permissions
+    user.allowed_cameras.clear()
+    
+    # Add new permissions
+    for camera in valid_cameras:
+        user.allowed_cameras.append(camera)
+    
+    await db.commit()
+    await db.refresh(user)
+    
+    # Log the permission change
+    camera_names = [c.name for c in valid_cameras]
+    await log_action(
+        db=db,
+        user=admin,
+        action=AuditAction.USER_UPDATE,
+        details=f"Updated camera permissions for user '{user.username}': {len(valid_cameras)} cameras ({', '.join(camera_names[:5])}{'...' if len(camera_names) > 5 else ''})",
+        request=request,
+        resource_type="user",
+        resource_id=str(user.id)
+    )
+    
+    logger.info(f"Permissions updated for user '{user.username}': {len(valid_cameras)} cameras")
+    
+    return UserPermissionsResponse(
+        user_id=user.id,
+        username=user.username,
+        role=user.role.value,
+        camera_ids=[c.id for c in user.allowed_cameras],
+        camera_names=[c.name for c in user.allowed_cameras]
+    )

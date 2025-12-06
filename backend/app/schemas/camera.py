@@ -2,8 +2,8 @@
 TitanNVR - Camera Pydantic Schemas
 Enterprise v2.0 with recording configuration
 """
-from pydantic import BaseModel, ConfigDict, Field
-from datetime import datetime
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from datetime import datetime, time
 from typing import Optional, Dict, Any, List
 from enum import Enum
 
@@ -13,6 +13,7 @@ class RecordingModeEnum(str, Enum):
     CONTINUOUS = "continuous"
     MOTION = "motion"
     EVENTS = "events"
+    NONE = "none"
 
 
 class CameraBase(BaseModel):
@@ -144,3 +145,59 @@ RECORDING_MODES_INFO: List[RecordingModeInfo] = [
         storage_impact="~0.5-2 GB/día por cámara"
     )
 ]
+
+
+# ============================================================
+# Camera Schedule Schemas
+# ============================================================
+
+class ScheduleSlot(BaseModel):
+    """A single schedule slot for a camera."""
+    day_of_week: int = Field(..., ge=0, le=6, description="0=Monday, 6=Sunday")
+    start_time: str = Field(..., description="Start time in HH:MM format")
+    end_time: str = Field(..., description="End time in HH:MM format")
+    mode: RecordingModeEnum = Field(..., description="Recording mode for this slot")
+    
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        """Validate time is in HH:MM format."""
+        try:
+            time.fromisoformat(v)
+        except ValueError:
+            raise ValueError(f"Invalid time format: {v}. Use HH:MM format.")
+        return v
+
+
+class CameraScheduleCreate(BaseModel):
+    """Schema for creating/updating camera schedules (bulk replace)."""
+    schedules: List[ScheduleSlot] = Field(default_factory=list, description="List of schedule slots")
+
+
+class CameraScheduleResponse(BaseModel):
+    """Response for a single schedule entry."""
+    id: int
+    camera_id: int
+    day_of_week: int
+    start_time: str
+    end_time: str
+    mode: str
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    @field_validator('start_time', 'end_time', mode='before')
+    @classmethod
+    def time_to_string(cls, v):
+        """Convert time object to string."""
+        if isinstance(v, time):
+            return v.strftime("%H:%M")
+        return v
+
+
+class CameraSchedulesResponse(BaseModel):
+    """Response for camera schedules list."""
+    camera_id: int
+    camera_name: str
+    schedules: List[CameraScheduleResponse] = []
+    has_schedule: bool = False

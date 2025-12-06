@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: titan_secure_2024
       POSTGRES_DB: titannvr
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./storage/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U titan -d titannvr"]
       interval: 5s
@@ -148,6 +148,4 @@ networks:
 
 volumes:
   storage:
-    driver: local
-  postgres_data:
     driver: local

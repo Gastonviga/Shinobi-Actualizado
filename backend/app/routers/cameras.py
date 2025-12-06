@@ -9,13 +9,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, async_session_maker
-from app.models.camera import Camera, RecordingMode
+from app.models.camera import Camera, RecordingMode, CameraSchedule
+from app.models.user import User, UserRole
+from app.services.auth import get_current_user_required
 from app.schemas.camera import (
     CameraCreate, CameraUpdate, CameraResponse, RECORDING_MODES_INFO,
-    CameraBulkCreate, CameraBulkResponse, CameraBulkDelete, CameraBulkDeleteResponse
+    CameraBulkCreate, CameraBulkResponse, CameraBulkDelete, CameraBulkDeleteResponse,
+    CameraScheduleCreate, CameraScheduleResponse, CameraSchedulesResponse
 )
 from app.services.stream_manager import stream_manager
 from app.services.config_generator import sync_frigate_config
+from datetime import time
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/cameras", tags=["Cameras"])
@@ -58,13 +62,35 @@ async def sync_all_to_frigate():
 async def get_cameras(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
 ):
-    """Get all cameras."""
-    result = await db.execute(
-        select(Camera).offset(skip).limit(limit)
-    )
-    cameras = result.scalars().all()
+    """
+    Get cameras accessible by the current user.
+    
+    - Admins: See ALL cameras
+    - Operators/Viewers: See only cameras in their `allowed_cameras` list
+    """
+    if current_user.role == UserRole.ADMIN:
+        # Admins see everything
+        result = await db.execute(
+            select(Camera).offset(skip).limit(limit)
+        )
+        cameras = result.scalars().all()
+    else:
+        # Non-admins only see their assigned cameras
+        allowed_ids = [c.id for c in current_user.allowed_cameras]
+        if not allowed_ids:
+            return []  # No permissions = no cameras
+        
+        result = await db.execute(
+            select(Camera)
+            .where(Camera.id.in_(allowed_ids))
+            .offset(skip)
+            .limit(limit)
+        )
+        cameras = result.scalars().all()
+    
     return cameras
 
 
@@ -533,4 +559,120 @@ async def test_camera_connection(request: StreamTestRequest):
         success=result.get("success", False),
         details=result.get("details"),
         error=result.get("error")
+    )
+
+
+# ============================================================
+# Camera Schedules Endpoints
+# ============================================================
+
+@router.get("/{camera_id}/schedules", response_model=CameraSchedulesResponse)
+async def get_camera_schedules(
+    camera_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all schedule entries for a camera.
+    
+    Returns schedule slots organized by day and time.
+    """
+    # Verify camera exists
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
+    camera = result.scalar_one_or_none()
+    
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with id {camera_id} not found"
+        )
+    
+    # Get schedules
+    result = await db.execute(
+        select(CameraSchedule)
+        .where(CameraSchedule.camera_id == camera_id)
+        .order_by(CameraSchedule.day_of_week, CameraSchedule.start_time)
+    )
+    schedules = result.scalars().all()
+    
+    return CameraSchedulesResponse(
+        camera_id=camera.id,
+        camera_name=camera.name,
+        schedules=[CameraScheduleResponse.model_validate(s) for s in schedules],
+        has_schedule=len(schedules) > 0
+    )
+
+
+@router.post("/{camera_id}/schedules", response_model=CameraSchedulesResponse)
+async def set_camera_schedules(
+    camera_id: int,
+    schedule_data: CameraScheduleCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Set schedules for a camera (replaces all existing schedules).
+    
+    Send an empty list to clear all schedules and use default recording mode.
+    
+    **Request Body Example:**
+    ```json
+    {
+        "schedules": [
+            {"day_of_week": 0, "start_time": "08:00", "end_time": "18:00", "mode": "continuous"},
+            {"day_of_week": 1, "start_time": "08:00", "end_time": "18:00", "mode": "continuous"},
+            {"day_of_week": 0, "start_time": "18:00", "end_time": "23:59", "mode": "motion"}
+        ]
+    }
+    ```
+    
+    **Days:** 0=Monday, 1=Tuesday, ..., 6=Sunday
+    **Modes:** continuous, motion, events, none
+    """
+    # Verify camera exists
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
+    camera = result.scalar_one_or_none()
+    
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera with id {camera_id} not found"
+        )
+    
+    # Delete existing schedules for this camera
+    result = await db.execute(
+        select(CameraSchedule).where(CameraSchedule.camera_id == camera_id)
+    )
+    existing_schedules = result.scalars().all()
+    for schedule in existing_schedules:
+        await db.delete(schedule)
+    
+    # Create new schedules
+    new_schedules = []
+    for slot in schedule_data.schedules:
+        schedule = CameraSchedule(
+            camera_id=camera_id,
+            day_of_week=slot.day_of_week,
+            start_time=time.fromisoformat(slot.start_time),
+            end_time=time.fromisoformat(slot.end_time),
+            mode=RecordingMode(slot.mode.value)
+        )
+        db.add(schedule)
+        new_schedules.append(schedule)
+    
+    await db.flush()
+    
+    # Refresh all new schedules to get IDs
+    for schedule in new_schedules:
+        await db.refresh(schedule)
+    
+    logger.info(f"Camera '{camera.name}' schedules updated: {len(new_schedules)} slots")
+    
+    # Trigger scheduler check in background to apply current schedule
+    background_tasks.add_task(sync_all_to_frigate)
+    
+    return CameraSchedulesResponse(
+        camera_id=camera.id,
+        camera_name=camera.name,
+        schedules=[CameraScheduleResponse.model_validate(s) for s in new_schedules],
+        has_schedule=len(new_schedules) > 0
     )

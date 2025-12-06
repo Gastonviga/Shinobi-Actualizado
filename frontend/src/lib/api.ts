@@ -985,3 +985,201 @@ export const disconnectDrive = async (): Promise<{ success: boolean; message: st
   const response = await api.post('/cloud/drive/disconnect')
   return response.data
 }
+
+// ============================================================
+// Camera Schedules API
+// ============================================================
+
+export type ScheduleMode = 'continuous' | 'motion' | 'events' | 'none'
+
+export interface ScheduleSlot {
+  day_of_week: number  // 0=Monday, 6=Sunday
+  start_time: string   // HH:MM format
+  end_time: string     // HH:MM format
+  mode: ScheduleMode
+}
+
+export interface CameraScheduleEntry {
+  id: number
+  camera_id: number
+  day_of_week: number
+  start_time: string
+  end_time: string
+  mode: string
+  created_at: string
+}
+
+export interface CameraSchedulesResponse {
+  camera_id: number
+  camera_name: string
+  schedules: CameraScheduleEntry[]
+  has_schedule: boolean
+}
+
+export const getCameraSchedules = async (cameraId: number): Promise<CameraSchedulesResponse> => {
+  const response = await api.get<CameraSchedulesResponse>(`/cameras/${cameraId}/schedules`)
+  return response.data
+}
+
+export const setCameraSchedules = async (
+  cameraId: number, 
+  schedules: ScheduleSlot[]
+): Promise<CameraSchedulesResponse> => {
+  const response = await api.post<CameraSchedulesResponse>(
+    `/cameras/${cameraId}/schedules`,
+    { schedules }
+  )
+  return response.data
+}
+
+// ============================================================
+// Forensic Search API
+// ============================================================
+
+export interface SearchFilters {
+  camera_ids?: string[]
+  labels?: string[]
+  date_from?: string  // ISO datetime string
+  date_to?: string    // ISO datetime string
+  min_score?: number
+  has_clip?: boolean
+}
+
+export interface SearchResultItem {
+  id: string
+  camera: string
+  label: string
+  score: number
+  start_time: string
+  end_time: string | null
+  duration_seconds: number | null
+  has_clip: boolean
+  has_snapshot: boolean
+  thumbnail_url: string | null
+  clip_url: string | null
+  zones: string | null
+  color: string
+}
+
+export interface SearchResponse {
+  results: SearchResultItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+  filters_applied: Record<string, unknown>
+}
+
+export interface LabelInfo {
+  label: string
+  count: number
+  color: string
+}
+
+export interface CameraEventInfo {
+  camera: string
+  event_count: number
+}
+
+export const searchEvents = async (
+  filters: SearchFilters,
+  page: number = 1,
+  limit: number = 50
+): Promise<SearchResponse> => {
+  const response = await api.post<SearchResponse>(
+    `/events/search?page=${page}&limit=${limit}`,
+    filters
+  )
+  return response.data
+}
+
+export const getSearchLabels = async (): Promise<{ labels: LabelInfo[] }> => {
+  const response = await api.get<{ labels: LabelInfo[] }>('/events/search/labels')
+  return response.data
+}
+
+export const getSearchCameras = async (): Promise<{ cameras: CameraEventInfo[] }> => {
+  const response = await api.get<{ cameras: CameraEventInfo[] }>('/events/search/cameras')
+  return response.data
+}
+
+// ============================================================
+// Backup & Restore
+// ============================================================
+
+export interface BackupMetadata {
+  version: string
+  timestamp: string
+  cameras_count: number
+  users_count: number
+  settings_count: number
+  maps_count: number
+}
+
+export interface ImportResult {
+  success: boolean
+  message: string
+  cameras_imported: number
+  users_imported: number
+  settings_imported: number
+  maps_imported: number
+  errors: string[]
+}
+
+export const getBackupInfo = async (): Promise<BackupMetadata> => {
+  const response = await api.get<BackupMetadata>('/system/backup/info')
+  return response.data
+}
+
+export const exportBackup = async (): Promise<Blob> => {
+  const response = await api.get('/system/backup/export', {
+    responseType: 'blob'
+  })
+  return response.data
+}
+
+export const importBackup = async (
+  file: File,
+  mode: 'merge' | 'replace' = 'merge',
+  skipAdmin: boolean = true
+): Promise<ImportResult> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  const response = await api.post<ImportResult>(
+    `/system/backup/import?mode=${mode}&skip_admin=${skipAdmin}`,
+    formData,
+    {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }
+  )
+  return response.data
+}
+
+// ============================================================
+// User Camera Permissions
+// ============================================================
+
+export interface UserPermissions {
+  user_id: number
+  username: string
+  role: string
+  camera_ids: number[]
+  camera_names: string[]
+}
+
+export const getUserPermissions = async (userId: number): Promise<UserPermissions> => {
+  const response = await api.get<UserPermissions>(`/auth/users/${userId}/permissions`)
+  return response.data
+}
+
+export const updateUserPermissions = async (
+  userId: number, 
+  cameraIds: number[]
+): Promise<UserPermissions> => {
+  const response = await api.put<UserPermissions>(
+    `/auth/users/${userId}/permissions`,
+    { camera_ids: cameraIds }
+  )
+  return response.data
+}

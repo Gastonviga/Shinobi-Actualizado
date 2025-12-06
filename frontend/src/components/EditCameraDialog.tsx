@@ -9,7 +9,9 @@ import {
   Save,
   Wifi,
   WifiOff,
-  CheckCircle
+  CheckCircle,
+  Clock,
+  Settings2
 } from 'lucide-react'
 import {
   Dialog,
@@ -22,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { updateCamera, testCameraConnection, type Camera as CameraType, type RecordingMode } from '@/lib/api'
+import { WeeklyScheduler } from '@/components/Scheduler/WeeklyScheduler'
 
 interface EditCameraDialogProps {
   camera: CameraType | null
@@ -60,6 +63,7 @@ const RECORDING_MODES = [
 export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCameraDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'config' | 'schedule'>('config')
   
   // Connection test state
   const [isTesting, setIsTesting] = useState(false)
@@ -89,6 +93,7 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
       })
       setError(null)
       setTestResult(null)
+      setActiveTab('config')
     }
   }, [camera, isOpen])
 
@@ -151,14 +156,43 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-zinc-900 border-zinc-800">
+      <DialogContent className="sm:max-w-[600px] bg-zinc-900 border-zinc-800">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
             <Camera className="w-5 h-5" />
-            Configurar Cámara
+            Configurar Cámara: {camera?.name}
           </DialogTitle>
         </DialogHeader>
 
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800 -mx-6 px-6">
+          <button
+            type="button"
+            onClick={() => setActiveTab('config')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === 'config'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Settings2 className="w-4 h-4" />
+            Configuración
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('schedule')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === 'schedule'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            Horarios
+          </button>
+        </div>
+
+        {activeTab === 'config' ? (
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Basic Info */}
           <div className="space-y-3">
@@ -341,6 +375,20 @@ export function EditCameraDialog({ camera, isOpen, onClose, onSuccess }: EditCam
             </Button>
           </DialogFooter>
         </form>
+        ) : (
+          /* Schedule Tab */
+          <div className="py-2">
+            {camera && (
+              <WeeklyScheduler
+                cameraId={camera.id}
+                cameraName={camera.name}
+                onSaved={() => {
+                  // Could show a success message or refresh
+                }}
+              />
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

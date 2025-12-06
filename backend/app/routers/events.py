@@ -22,6 +22,47 @@ from app.services.notification import send_detection_notification
 from app.services.auth import get_current_user_required
 from app.models.user import User
 
+
+# ============================================================
+# Search Schemas
+# ============================================================
+
+class SearchFilters(BaseModel):
+    """Filters for forensic event search."""
+    camera_ids: Optional[List[str]] = None  # Filter by camera names
+    labels: Optional[List[str]] = None  # Filter by object labels (person, car, etc.)
+    date_from: Optional[datetime] = None  # Start of date range
+    date_to: Optional[datetime] = None  # End of date range
+    min_score: Optional[float] = None  # Minimum confidence score (0.0-1.0)
+    has_clip: Optional[bool] = None  # Only events with video clips
+
+
+class SearchResultItem(BaseModel):
+    """A single search result item."""
+    id: str
+    camera: str
+    label: str
+    score: float
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    has_clip: bool
+    has_snapshot: bool
+    thumbnail_url: Optional[str] = None
+    clip_url: Optional[str] = None
+    zones: Optional[str] = None
+    color: str  # Label color for UI
+
+
+class SearchResponse(BaseModel):
+    """Paginated search results."""
+    results: List[SearchResultItem]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    filters_applied: Dict[str, Any]
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -496,3 +537,175 @@ async def get_event_detail(
         created_at=event.created_at,
         duration_seconds=event.duration_seconds
     )
+
+
+# ============================================================
+# Forensic Search Endpoint
+# ============================================================
+
+FRIGATE_URL = "http://frigate:5000"  # Internal Docker URL
+
+def get_frigate_thumbnail_url(event_id: str) -> str:
+    """Generate Frigate thumbnail URL for an event."""
+    # Use localhost for browser access (through Docker port mapping)
+    return f"http://localhost:5000/api/events/{event_id}/thumbnail.jpg"
+
+def get_frigate_clip_url(event_id: str) -> str:
+    """Generate Frigate clip URL for an event."""
+    return f"http://localhost:5000/api/events/{event_id}/clip.mp4"
+
+
+@router.post("/search", response_model=SearchResponse)
+async def search_events(
+    filters: SearchFilters,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Advanced forensic search for events.
+    
+    Allows searching by multiple criteria:
+    - Camera names
+    - Object labels (person, car, dog, etc.)
+    - Date/time range
+    - Minimum confidence score
+    - Clip availability
+    
+    Returns paginated results with thumbnail and clip URLs.
+    
+    **Example Request:**
+    ```json
+    {
+        "camera_ids": ["entrance", "parking"],
+        "labels": ["person", "car"],
+        "date_from": "2024-01-01T00:00:00",
+        "date_to": "2024-01-02T23:59:59",
+        "min_score": 0.7,
+        "has_clip": true
+    }
+    ```
+    """
+    query = select(Event)
+    conditions = []
+    
+    # Apply filters
+    if filters.camera_ids:
+        conditions.append(Event.camera.in_(filters.camera_ids))
+    
+    if filters.labels:
+        conditions.append(Event.label.in_(filters.labels))
+    
+    if filters.date_from:
+        conditions.append(Event.start_time >= filters.date_from)
+    
+    if filters.date_to:
+        conditions.append(Event.start_time <= filters.date_to)
+    
+    if filters.min_score is not None:
+        conditions.append(Event.score >= filters.min_score)
+    
+    if filters.has_clip is not None:
+        conditions.append(Event.has_clip == filters.has_clip)
+    
+    # Apply all conditions
+    if conditions:
+        query = query.where(and_(*conditions))
+    
+    # Get total count for pagination
+    count_query = select(func.count(Event.id))
+    if conditions:
+        count_query = count_query.where(and_(*conditions))
+    count_result = await db.execute(count_query)
+    total = count_result.scalar() or 0
+    
+    # Calculate pagination
+    total_pages = max(1, (total + limit - 1) // limit)
+    offset = (page - 1) * limit
+    
+    # Execute search query with pagination
+    query = query.order_by(Event.start_time.desc()).offset(offset).limit(limit)
+    result = await db.execute(query)
+    events = result.scalars().all()
+    
+    # Build results with URLs
+    results = []
+    for event in events:
+        results.append(SearchResultItem(
+            id=event.id,
+            camera=event.camera,
+            label=event.label,
+            score=event.score,
+            start_time=event.start_time,
+            end_time=event.end_time,
+            duration_seconds=event.duration_seconds,
+            has_clip=event.has_clip,
+            has_snapshot=event.has_snapshot,
+            thumbnail_url=get_frigate_thumbnail_url(event.id) if event.has_snapshot else None,
+            clip_url=get_frigate_clip_url(event.id) if event.has_clip else None,
+            zones=event.zones,
+            color=get_label_color(event.label)
+        ))
+    
+    # Build applied filters summary
+    filters_applied = {}
+    if filters.camera_ids:
+        filters_applied["cameras"] = filters.camera_ids
+    if filters.labels:
+        filters_applied["labels"] = filters.labels
+    if filters.date_from:
+        filters_applied["date_from"] = filters.date_from.isoformat()
+    if filters.date_to:
+        filters_applied["date_to"] = filters.date_to.isoformat()
+    if filters.min_score is not None:
+        filters_applied["min_score"] = filters.min_score
+    if filters.has_clip is not None:
+        filters_applied["has_clip"] = filters.has_clip
+    
+    return SearchResponse(
+        results=results,
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+        filters_applied=filters_applied
+    )
+
+
+@router.get("/search/labels")
+async def get_available_labels(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Get list of available labels in the database.
+    
+    Useful for populating the search filter UI.
+    """
+    result = await db.execute(
+        select(Event.label, func.count(Event.id))
+        .group_by(Event.label)
+        .order_by(func.count(Event.id).desc())
+    )
+    labels = [{"label": row[0], "count": row[1], "color": get_label_color(row[0])} for row in result.all()]
+    return {"labels": labels}
+
+
+@router.get("/search/cameras")
+async def get_available_cameras(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_required)
+):
+    """
+    Get list of cameras with events in the database.
+    
+    Useful for populating the search filter UI.
+    """
+    result = await db.execute(
+        select(Event.camera, func.count(Event.id))
+        .group_by(Event.camera)
+        .order_by(Event.camera)
+    )
+    cameras = [{"camera": row[0], "event_count": row[1]} for row in result.all()]
+    return {"cameras": cameras}

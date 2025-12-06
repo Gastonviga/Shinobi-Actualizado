@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { 
   Camera, 
   Video, 
@@ -10,7 +11,10 @@ import {
   Shield,
   UserCog,
   Eye,
-  Map
+  Map,
+  Search,
+  PlaySquare,
+  MonitorPlay
 } from 'lucide-react'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
@@ -20,6 +24,8 @@ import { EditCameraDialog } from '@/components/EditCameraDialog'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { RecordingsView } from '@/components/RecordingsView'
 import { MapsView } from '@/components/MapsView'
+import { SmartSearch } from '@/components/SmartSearch/SmartSearch'
+import { IncidentWorkspace } from '@/components/SyncPlayback/IncidentWorkspace'
 import { LoginPage } from '@/components/LoginPage'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { 
@@ -32,6 +38,7 @@ import {
   type CameraStatus
 } from '@/lib/api'
 import { MatrixContainer } from '@/components/VideoMatrix'
+import { KioskPage } from '@/components/Kiosk'
 import { ChevronLeft, ChevronRight, Filter, CheckSquare, Square, X, Trash2 } from 'lucide-react'
 
 function Dashboard() {
@@ -44,7 +51,7 @@ function Dashboard() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [editingCamera, setEditingCamera] = useState<CameraType | null>(null)
   const [cameraStatuses, setCameraStatuses] = useState<Record<number, CameraStatus>>({})
-  const [activeView, setActiveView] = useState<'cameras' | 'recordings' | 'maps'>('cameras')
+  const [activeView, setActiveView] = useState<'cameras' | 'recordings' | 'maps' | 'search' | 'playback'>('cameras')
   const [cameraViewMode, setCameraViewMode] = useState<'matrix' | 'list'>('matrix')
   
   // Filter and pagination state
@@ -224,6 +231,28 @@ function Dashboard() {
                 <Map className="h-4 w-4 inline mr-1.5" />
                 Mapa
               </button>
+              <button
+                onClick={() => setActiveView('search')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'search' 
+                    ? 'bg-secondary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Search className="h-4 w-4 inline mr-1.5" />
+                Búsqueda
+              </button>
+              <button
+                onClick={() => setActiveView('playback')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  activeView === 'playback' 
+                    ? 'bg-secondary text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <PlaySquare className="h-4 w-4 inline mr-1.5" />
+                Sala
+              </button>
             </nav>
           </div>
           
@@ -265,6 +294,15 @@ function Dashboard() {
               </button>
             )}
             
+            {/* Kiosk Mode Button */}
+            <button
+              onClick={() => window.open('/kiosk', '_blank')}
+              className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              title="Modo Kiosco (Video Wall)"
+            >
+              <MonitorPlay className="h-4 w-4" />
+            </button>
+            
             {/* Theme Toggle */}
             <ModeToggle />
             
@@ -280,6 +318,11 @@ function Dashboard() {
       </header>
 
       {/* Main Content */}
+      {activeView === 'search' ? (
+        <SmartSearch onBack={() => setActiveView('cameras')} />
+      ) : activeView === 'playback' ? (
+        <IncidentWorkspace onBack={() => setActiveView('cameras')} />
+      ) : (
       <main className="flex-1 p-2">
         {activeView === 'recordings' ? (
           <RecordingsView />
@@ -492,6 +535,7 @@ function Dashboard() {
           </>
         )}
       </main>
+      )}
 
       {/* Minimal Footer */}
       <footer className="h-8 flex items-center justify-center text-[10px] text-muted-foreground border-t border-border">
@@ -580,9 +624,9 @@ function Dashboard() {
   )
 }
 
-// Main App with Authentication
-function AppContent() {
-  const { isLoggedIn, isLoading, user, logout, settings } = useAuth()
+// Router wrapper for protected routes
+function ProtectedRoutes() {
+  const { isLoggedIn, isLoading } = useAuth()
 
   if (isLoading) {
     return (
@@ -599,14 +643,21 @@ function AppContent() {
     return <LoginPage />
   }
 
-  return <Dashboard />
+  return (
+    <Routes>
+      <Route path="/kiosk" element={<KioskPage />} />
+      <Route path="/*" element={<Dashboard />} />
+    </Routes>
+  )
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <ProtectedRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
 

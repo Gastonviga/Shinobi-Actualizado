@@ -24,8 +24,10 @@ from app.routers.audit import router as audit_router
 from app.routers.system import router as system_router
 from app.routers.incidents import router as incidents_router
 from app.routers.cloud import router as cloud_router
+from app.routers.backup import router as backup_router
 from app.services.stream_manager import stream_manager
 from app.services.cloud_sync import periodic_cloud_sync
+from app.services.scheduler import periodic_schedule_check
 from app.services.auth import create_default_admin
 
 # Configure logging
@@ -102,10 +104,15 @@ async def lifespan(app: FastAPI):
     cloud_sync_task = asyncio.create_task(periodic_cloud_sync(interval_hours=1))
     logger.info("☁️ Cloud sync task started")
     
+    # Start background task for recording scheduler (every 1 minute)
+    scheduler_task = asyncio.create_task(periodic_schedule_check(interval_seconds=60))
+    logger.info("📅 Recording scheduler task started")
+    
     yield
     
     # Shutdown
     cloud_sync_task.cancel()
+    scheduler_task.cancel()
     logger.info(f"👋 Shutting down {settings.app_name}...")
 
 
@@ -139,6 +146,7 @@ app.include_router(audit_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
 app.include_router(incidents_router, prefix="/api")
 app.include_router(cloud_router, prefix="/api")
+app.include_router(backup_router, prefix="/api")
 
 
 @app.get("/")

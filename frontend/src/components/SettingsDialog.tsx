@@ -24,7 +24,9 @@ import {
   KeyRound,
   Send,
   Edit2,
-  Lock
+  Lock,
+  HardDrive,
+  Key
 } from 'lucide-react'
 import {
   Dialog,
@@ -57,6 +59,8 @@ import {
 } from '@/lib/api'
 import { AuditPanel } from '@/components/AuditPanel'
 import { SystemStatusPanel } from '@/components/SystemStatusPanel'
+import { StorageManager } from '@/components/StorageManager'
+import { UserPermissionsDialog } from '@/components/UserPermissionsDialog'
 import { useAuth } from '@/contexts/AuthContext'
 
 const MAX_LOGO_SIZE = 2 * 1024 * 1024 // 2MB
@@ -88,7 +92,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'notifications' | 'cloud' | 'audit' | 'system'>('branding')
+  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'notifications' | 'cloud' | 'audit' | 'system' | 'storage'>('branding')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -117,6 +121,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     password: '', 
     is_active: true 
   })
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null)
   
   // Notifications (SMTP) state
   const [smtpEmail, setSmtpEmail] = useState('')
@@ -581,6 +586,17 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 <FileText className="w-4 h-4" />
                 Auditoría
               </button>
+              <button
+                onClick={() => setActiveTab('storage')}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'storage' 
+                    ? 'text-blue-400 border-b-2 border-blue-400' 
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <HardDrive className="w-4 h-4" />
+                Almacenamiento
+              </button>
             </>
           )}
           <button
@@ -741,7 +757,17 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        {/* Edit button - always visible except for own user */}
+                        {/* Permissions button - for non-admin users */}
+                        {user.role !== 'admin' && (
+                          <button
+                            onClick={() => setPermissionsUser(user)}
+                            className="p-2 rounded-full hover:bg-amber-500/10 text-zinc-500 hover:text-amber-400 transition-colors"
+                            title="Permisos de cámaras"
+                          >
+                            <Key className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Edit button - always visible */}
                         <button
                           onClick={() => openEditUser(user)}
                           className="p-2 rounded-full hover:bg-blue-500/10 text-zinc-500 hover:text-blue-400 transition-colors"
@@ -1138,6 +1164,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           ) : activeTab === 'audit' ? (
             /* Audit Tab */
             <AuditPanel isAdmin={isAdmin} />
+          ) : activeTab === 'storage' ? (
+            /* Storage Tab */
+            <StorageManager />
           ) : (
             /* System Tab */
             <SystemStatusPanel isAdmin={isAdmin} />
@@ -1316,6 +1345,16 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           </div>
         </div>
       )}
+
+      {/* User Permissions Dialog */}
+      <UserPermissionsDialog
+        user={permissionsUser}
+        isOpen={!!permissionsUser}
+        onClose={() => setPermissionsUser(null)}
+        onSuccess={() => {
+          // Optionally reload users or show notification
+        }}
+      />
     </Dialog>
   )
 }

@@ -94,6 +94,25 @@ class ServicesStatus(BaseModel):
     containers: List[DockerContainerStats]
 
 
+class StorageVolume(BaseModel):
+    """Storage volume information."""
+    mount_point: str
+    device: str
+    total_gb: float
+    used_gb: float
+    free_gb: float
+    percent_used: float
+    is_primary: bool  # True if it matches the recording path
+    fs_type: Optional[str] = None
+
+
+class StorageVolumesResponse(BaseModel):
+    """Response for storage volumes endpoint."""
+    volumes: List[StorageVolume]
+    primary_path: str
+    estimated_days_remaining: Optional[int] = None
+
+
 # ============================================================
 # Helper Functions
 # ============================================================
@@ -346,3 +365,85 @@ async def get_storage_retention_info(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting storage info: {str(e)}")
+
+
+@router.get("/storage/volumes", response_model=StorageVolumesResponse)
+async def get_storage_volumes(
+    current_user: User = Depends(require_admin)
+):
+    """
+    Get all storage volumes/disks available on the system (admin only).
+    
+    Filters out virtual devices (loop, snap, docker overlay).
+    """
+    volumes: List[StorageVolume] = []
+    primary_path = get_storage_path()
+    
+    # Virtual/temporary filesystem types and device patterns to skip
+    SKIP_FS_TYPES = {'squashfs', 'tmpfs', 'devtmpfs', 'overlay', 'devfs', 'proc', 'sysfs'}
+    SKIP_DEVICE_PATTERNS = ('loop', 'snap', '/dev/loop', 'none', 'overlay')
+    
+    try:
+        partitions = psutil.disk_partitions(all=False)
+        
+        for partition in partitions:
+            # Skip virtual/special filesystems
+            if partition.fstype.lower() in SKIP_FS_TYPES:
+                continue
+            
+            # Skip loop devices, snap, docker overlays
+            device_lower = partition.device.lower()
+            if any(pattern in device_lower for pattern in SKIP_DEVICE_PATTERNS):
+                continue
+            
+            # Skip if mount point contains docker or snap paths
+            mount_lower = partition.mountpoint.lower()
+            if any(skip in mount_lower for skip in ['/snap/', '/docker/', '/.docker/']):
+                continue
+            
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                
+                # Check if this is the primary storage location
+                is_primary = False
+                try:
+                    # Resolve real paths for accurate comparison
+                    primary_real = os.path.realpath(primary_path)
+                    mount_real = os.path.realpath(partition.mountpoint)
+                    is_primary = primary_real.startswith(mount_real) or mount_real == primary_real
+                except Exception:
+                    is_primary = partition.mountpoint == primary_path
+                
+                volume = StorageVolume(
+                    mount_point=partition.mountpoint,
+                    device=partition.device,
+                    total_gb=bytes_to_gb(usage.total),
+                    used_gb=bytes_to_gb(usage.used),
+                    free_gb=bytes_to_gb(usage.free),
+                    percent_used=round(usage.percent, 1),
+                    is_primary=is_primary,
+                    fs_type=partition.fstype
+                )
+                volumes.append(volume)
+                
+            except (PermissionError, OSError) as e:
+                logger.warning(f"Cannot access disk {partition.mountpoint}: {e}")
+                continue
+        
+        # Calculate estimated days remaining based on primary storage
+        estimated_days = None
+        primary_volume = next((v for v in volumes if v.is_primary), None)
+        if primary_volume and primary_volume.free_gb > 0:
+            # Assume ~5GB per day usage (conservative estimate)
+            estimated_daily_gb = 5
+            estimated_days = int(primary_volume.free_gb / estimated_daily_gb)
+        
+        return StorageVolumesResponse(
+            volumes=volumes,
+            primary_path=primary_path,
+            estimated_days_remaining=estimated_days
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting storage volumes: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting storage volumes: {str(e)}")
