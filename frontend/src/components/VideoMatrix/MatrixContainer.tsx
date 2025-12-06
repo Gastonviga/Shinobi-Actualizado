@@ -160,9 +160,9 @@ export function MatrixContainer({
   }
 
   return (
-    <div className={cn("space-y-4", className)}>
+    <div className={cn("flex flex-col", className)}>
       {/* Layout Toolbar */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-3 shrink-0">
         <LayoutSelector
           currentLayout={layout}
           onLayoutChange={handleLayoutChange}
@@ -173,9 +173,9 @@ export function MatrixContainer({
         </div>
       </div>
 
-      {/* Video Grid */}
+      {/* Video Grid - Fills remaining space */}
       <div className={cn(
-        "grid gap-3",
+        "grid gap-2 flex-1 min-h-0",
         getGridClasses()
       )}>
         {slotCameraIds.map((cameraId, index) => {

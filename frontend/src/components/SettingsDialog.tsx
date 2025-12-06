@@ -26,7 +26,8 @@ import {
   Edit2,
   Lock,
   HardDrive,
-  Key
+  Key,
+  Archive
 } from 'lucide-react'
 import {
   Dialog,
@@ -60,6 +61,7 @@ import {
 import { AuditPanel } from '@/components/AuditPanel'
 import { SystemStatusPanel } from '@/components/SystemStatusPanel'
 import { StorageManager } from '@/components/StorageManager'
+import { BackupManager } from '@/components/BackupManager'
 import { UserPermissionsDialog } from '@/components/UserPermissionsDialog'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -92,7 +94,7 @@ const ROLE_LABELS: Record<string, string> = {
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'notifications' | 'cloud' | 'audit' | 'system' | 'storage'>('branding')
+  const [activeTab, setActiveTab] = useState<'branding' | 'users' | 'notifications' | 'cloud' | 'audit' | 'system' | 'storage' | 'backups'>('branding')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -519,22 +521,22 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 p-0 sm:max-w-4xl w-[95vw]">
+      <DialogContent className="bg-card border-border p-0 sm:max-w-4xl w-[95vw]">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2 text-zinc-100">
+          <DialogTitle className="flex items-center gap-2 text-foreground">
             <Settings className="w-5 h-5" />
             Configuración del Sistema
           </DialogTitle>
         </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex border-b border-zinc-800">
+        <div className="flex border-b border-border">
           <button
             onClick={() => setActiveTab('branding')}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'branding' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'text-primary border-b-2 border-primary' 
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Palette className="w-4 h-4" />
@@ -544,8 +546,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             onClick={() => setActiveTab('users')}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'users' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'text-primary border-b-2 border-primary' 
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -557,8 +559,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 onClick={() => setActiveTab('notifications')}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'notifications' 
-                    ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Mail className="w-4 h-4" />
@@ -568,8 +570,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 onClick={() => setActiveTab('cloud')}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'cloud' 
-                    ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Cloud className="w-4 h-4" />
@@ -579,8 +581,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 onClick={() => setActiveTab('audit')}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'audit' 
-                    ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <FileText className="w-4 h-4" />
@@ -590,8 +592,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 onClick={() => setActiveTab('storage')}
                 className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'storage' 
-                    ? 'text-blue-400 border-b-2 border-blue-400' 
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'text-primary border-b-2 border-primary' 
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <HardDrive className="w-4 h-4" />
@@ -603,13 +605,26 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             onClick={() => setActiveTab('system')}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'system' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-zinc-400 hover:text-zinc-200'
+                ? 'text-primary border-b-2 border-primary' 
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Activity className="w-4 h-4" />
             Sistema
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('backups')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'backups' 
+                  ? 'text-primary border-b-2 border-primary' 
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Archive className="w-4 h-4" />
+              Backups
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -632,7 +647,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
           {isLoading ? (
             <div className="flex items-center justify-center h-[200px]">
-              <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : activeTab === 'branding' ? (
             <div className="space-y-4">
@@ -687,7 +702,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </Button>
                       )}
                     </div>
-                    <p className="text-[10px] text-zinc-500">
+                    <p className="text-[10px] text-muted-foreground">
                       PNG o JPG, máximo 2MB
                     </p>
                   </div>
@@ -702,7 +717,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   placeholder="TitanNVR Enterprise"
                   className="bg-zinc-800 border-zinc-700"
                 />
-                <p className="text-[10px] text-zinc-500">
+                <p className="text-[10px] text-muted-foreground">
                   Se muestra en el header y la página de login
                 </p>
               </div>
@@ -753,7 +768,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-zinc-200">{user.username}</p>
-                          <p className="text-[10px] text-zinc-500">{ROLE_LABELS[user.role]}</p>
+                          <p className="text-[10px] text-muted-foreground">{ROLE_LABELS[user.role]}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -761,7 +776,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         {user.role !== 'admin' && (
                           <button
                             onClick={() => setPermissionsUser(user)}
-                            className="p-2 rounded-full hover:bg-amber-500/10 text-zinc-500 hover:text-amber-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-amber-500/10 text-muted-foreground hover:text-amber-400 transition-colors"
                             title="Permisos de cámaras"
                           >
                             <Key className="w-4 h-4" />
@@ -770,7 +785,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         {/* Edit button - always visible */}
                         <button
                           onClick={() => openEditUser(user)}
-                          className="p-2 rounded-full hover:bg-blue-500/10 text-zinc-500 hover:text-blue-400 transition-colors"
+                          className="p-2 rounded-full hover:bg-blue-500/10 text-muted-foreground hover:text-blue-400 transition-colors"
                           title="Editar usuario"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -779,7 +794,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                         {user.username !== 'admin' && (
                           <button
                             onClick={() => setDeleteConfirm({ userId: user.id, username: user.username })}
-                            className="p-2 rounded-full hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
                             title="Eliminar usuario"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -894,7 +909,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     onChange={(e) => setSmtpPassword(e.target.value)}
                     className="bg-zinc-800 border-zinc-700 font-mono"
                   />
-                  <p className="text-[10px] text-zinc-500">
+                  <p className="text-[10px] text-muted-foreground">
                     <a 
                       href="https://myaccount.google.com/apppasswords" 
                       target="_blank" 
@@ -1167,6 +1182,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           ) : activeTab === 'storage' ? (
             /* Storage Tab */
             <StorageManager />
+          ) : activeTab === 'backups' ? (
+            /* Backups Tab */
+            <BackupManager />
           ) : (
             /* System Tab */
             <SystemStatusPanel isAdmin={isAdmin} />
@@ -1282,7 +1300,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               {/* Active Status */}
               <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 border border-zinc-700">
                 <div className="flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-zinc-500" />
+                  <Shield className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-zinc-300">Usuario Activo</span>
                 </div>
                 <button
@@ -1311,7 +1329,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   onChange={(e) => setEditUserData(prev => ({ ...prev, password: e.target.value }))}
                   className="bg-zinc-800 border-zinc-700"
                 />
-                <p className="text-[10px] text-zinc-500 mt-1">
+                <p className="text-[10px] text-muted-foreground mt-1">
                   Si escribes una nueva contraseña, el usuario deberá usarla inmediatamente
                 </p>
               </div>

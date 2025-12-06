@@ -59,7 +59,7 @@ export function SmartCameraCard({
       {/* Frigate-style Card - Full bleed video */}
       <div 
         className={cn(
-          "group relative aspect-video bg-zinc-900 rounded-lg overflow-hidden cursor-pointer transition-all",
+          "group relative aspect-video bg-black rounded-lg overflow-hidden cursor-pointer transition-all",
           isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
         )}
         onClick={handleClick}
@@ -145,7 +145,7 @@ export function SmartCameraCard({
                 {camera.name}
               </h3>
               {camera.location && (
-                <p className="text-[10px] text-zinc-400 truncate">
+                <p className="text-[10px] text-white/60 truncate">
                   {camera.location}
                 </p>
               )}
@@ -170,10 +170,10 @@ export function SmartCameraCard({
 
         {/* Offline Overlay */}
         {connectionStatus === 'offline' && (
-          <div className="absolute inset-0 bg-zinc-900/80 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
             <div className="text-center">
-              <WifiOff className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-              <p className="text-xs text-zinc-500">Sin conexión</p>
+              <WifiOff className="w-8 h-8 text-white/40 mx-auto mb-2" />
+              <p className="text-xs text-white/50">Sin conexión</p>
             </div>
           </div>
         )}

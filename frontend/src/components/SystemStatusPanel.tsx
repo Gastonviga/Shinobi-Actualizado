@@ -18,7 +18,6 @@ import {
   type SystemHealth,
   type ServicesStatus
 } from '@/lib/api'
-import { BackupManager } from '@/components/BackupManager'
 
 interface SystemStatusPanelProps {
   isAdmin: boolean
@@ -67,7 +66,7 @@ const CircularGauge = ({
             fill="none"
             stroke="currentColor"
             strokeWidth={strokeWidth}
-            className="text-zinc-700"
+            className="text-muted"
           />
           {/* Progress circle */}
           <circle
@@ -88,10 +87,10 @@ const CircularGauge = ({
           <span className={`text-2xl font-bold ${actualColorClass}`}>
             {value.toFixed(1)}
           </span>
-          <span className="text-xs text-zinc-400">{unit}</span>
+          <span className="text-xs text-muted-foreground">{unit}</span>
         </div>
       </div>
-      <span className="mt-2 text-sm font-medium text-zinc-300">{label}</span>
+      <span className="mt-2 text-sm font-medium text-foreground">{label}</span>
     </div>
   )
 }
@@ -107,8 +106,8 @@ const ServiceIndicator = ({
   const isOnline = status === 'online'
   
   return (
-    <div className="flex items-center justify-between p-2 rounded-lg bg-zinc-800/50">
-      <span className="text-sm text-zinc-300">{name}</span>
+    <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/50">
+      <span className="text-sm text-foreground">{name}</span>
       <div className={`flex items-center gap-1 text-xs ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
         <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-red-400'} animate-pulse`} />
         {status}
@@ -192,8 +191,8 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
             )}
           </div>
           <div>
-            <h3 className="text-sm font-medium text-zinc-200">Estado del Sistema</h3>
-            <p className="text-xs text-zinc-500">
+            <h3 className="text-sm font-medium text-foreground">Estado del Sistema</h3>
+            <p className="text-xs text-muted-foreground">
               {stats.overall_status === 'healthy' ? 'Todo funcionando correctamente' :
                stats.overall_status === 'warning' ? 'Atención requerida' : 'Estado crítico'}
             </p>
@@ -205,7 +204,7 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
           size="sm"
           onClick={() => loadData(true)}
           disabled={refreshing}
-          className="text-zinc-400 hover:text-zinc-200"
+          className="text-muted-foreground hover:text-foreground"
         >
           <RefreshCw className={`w-4 h-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
           Actualizar
@@ -229,38 +228,38 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
       
       {/* Resource Gauges */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="flex flex-col items-center p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="flex flex-col items-center p-4 rounded-xl bg-secondary/30 border border-border">
           <Cpu className="w-5 h-5 text-blue-400 mb-2" />
           <CircularGauge 
             value={stats.cpu.percent_total}
             label="CPU"
             colorClass="text-blue-500"
           />
-          <span className="mt-2 text-xs text-zinc-500">
+          <span className="mt-2 text-xs text-muted-foreground">
             {stats.cpu.core_count} núcleos
           </span>
         </div>
         
-        <div className="flex flex-col items-center p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="flex flex-col items-center p-4 rounded-xl bg-secondary/30 border border-border">
           <MemoryStick className="w-5 h-5 text-purple-400 mb-2" />
           <CircularGauge 
             value={stats.memory.percent_used}
             label="Memoria RAM"
             colorClass="text-purple-500"
           />
-          <span className="mt-2 text-xs text-zinc-500">
+          <span className="mt-2 text-xs text-muted-foreground">
             {stats.memory.used_gb.toFixed(1)} / {stats.memory.total_gb.toFixed(1)} GB
           </span>
         </div>
         
-        <div className="flex flex-col items-center p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="flex flex-col items-center p-4 rounded-xl bg-secondary/30 border border-border">
           <HardDrive className={`w-5 h-5 mb-2 ${stats.disk.is_critical ? 'text-red-400' : 'text-emerald-400'}`} />
           <CircularGauge 
             value={stats.disk.percent_used}
             label="Almacenamiento"
             colorClass={stats.disk.is_critical ? 'text-red-500' : 'text-emerald-500'}
           />
-          <span className="mt-2 text-xs text-zinc-500">
+          <span className="mt-2 text-xs text-muted-foreground">
             {stats.disk.free_gb.toFixed(1)} GB libres
           </span>
           {stats.disk.is_critical && (
@@ -273,36 +272,36 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
       
       {/* Network & Uptime */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="p-4 rounded-xl bg-secondary/30 border border-border">
           <div className="flex items-center gap-2 mb-3">
             <Wifi className="w-4 h-4 text-cyan-400" />
-            <span className="text-sm font-medium text-zinc-300">Red</span>
+            <span className="text-sm font-medium text-foreground">Red</span>
           </div>
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <p className="text-lg font-semibold text-zinc-200">
+              <p className="text-lg font-semibold text-foreground">
                 {stats.network.bytes_sent_gb.toFixed(2)} GB
               </p>
-              <p className="text-xs text-zinc-500">Enviados</p>
+              <p className="text-xs text-muted-foreground">Enviados</p>
             </div>
             <div>
-              <p className="text-lg font-semibold text-zinc-200">
+              <p className="text-lg font-semibold text-foreground">
                 {stats.network.bytes_recv_gb.toFixed(2)} GB
               </p>
-              <p className="text-xs text-zinc-500">Recibidos</p>
+              <p className="text-xs text-muted-foreground">Recibidos</p>
             </div>
           </div>
         </div>
         
-        <div className="p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="p-4 rounded-xl bg-secondary/30 border border-border">
           <div className="flex items-center gap-2 mb-3">
             <Clock className="w-4 h-4 text-amber-400" />
-            <span className="text-sm font-medium text-zinc-300">Tiempo Activo</span>
+            <span className="text-sm font-medium text-foreground">Tiempo Activo</span>
           </div>
-          <p className="text-2xl font-semibold text-zinc-200 text-center">
+          <p className="text-2xl font-semibold text-foreground text-center">
             {stats.uptime.formatted}
           </p>
-          <p className="text-xs text-zinc-500 text-center mt-1">
+          <p className="text-xs text-muted-foreground text-center mt-1">
             Desde {new Date(stats.uptime.started_at).toLocaleString()}
           </p>
         </div>
@@ -310,10 +309,10 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
       
       {/* Services Status (Admin only) */}
       {isAdmin && services && (
-        <div className="p-4 rounded-xl bg-zinc-800/30 border border-zinc-700/50">
+        <div className="p-4 rounded-xl bg-secondary/30 border border-border">
           <div className="flex items-center gap-2 mb-4">
             <Server className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-medium text-zinc-300">Servicios</span>
+            <span className="text-sm font-medium text-foreground">Servicios</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <ServiceIndicator name="Backend API" status={services.backend} />
@@ -323,12 +322,12 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
           </div>
           
           {services.containers.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-zinc-700/50">
-              <p className="text-xs text-zinc-500 mb-2">Contenedores Docker</p>
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">Contenedores Docker</p>
               <div className="space-y-1">
                 {services.containers.map((container) => (
                   <div key={container.name} className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-400">{container.name}</span>
+                    <span className="text-muted-foreground">{container.name}</span>
                     <span className={`${
                       container.status === 'running' ? 'text-emerald-400' : 'text-red-400'
                     }`}>
@@ -344,17 +343,10 @@ export function SystemStatusPanel({ isAdmin }: SystemStatusPanelProps) {
       )}
       
       {/* Quick Info */}
-      <div className="flex items-center justify-center gap-4 text-xs text-zinc-500">
+      <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
         <Activity className="w-3 h-3" />
         <span>Última actualización: {new Date(stats.timestamp).toLocaleTimeString()}</span>
       </div>
-      
-      {/* Backup Section (Admin only) */}
-      {isAdmin && (
-        <div className="pt-6 mt-6 border-t border-zinc-700/50">
-          <BackupManager />
-        </div>
-      )}
     </div>
   )
 }

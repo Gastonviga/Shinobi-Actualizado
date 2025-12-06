@@ -39,7 +39,7 @@ import {
 } from '@/lib/api'
 import { MatrixContainer } from '@/components/VideoMatrix'
 import { KioskPage } from '@/components/Kiosk'
-import { ChevronLeft, ChevronRight, Filter, CheckSquare, Square, X, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Filter, CheckSquare, Square, X, Trash2, LayoutGrid, List } from 'lucide-react'
 
 function Dashboard() {
   const { user, logout, settings } = useAuth()
@@ -176,129 +176,103 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Glassmorphic Header */}
+      {/* Glassmorphic Header - 3 Column Layout */}
       <header className="h-14 sticky top-0 z-50 glass border-b border-border">
-        <div className="h-full flex items-center justify-between px-4">
-          {/* Logo & Nav */}
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              {settings?.logo_url ? (
-                <img 
-                  src={settings.logo_url} 
-                  alt="Logo" 
-                  className="h-8 w-8 object-contain rounded"
-                />
-              ) : (
-                <Video className="h-6 w-6 text-blue-500" />
-              )}
-              <span className="font-semibold text-foreground">
-                {settings?.system_title || 'TitanNVR'}
-              </span>
-            </div>
-            
-            {/* Nav Tabs */}
-            <nav className="flex items-center">
-              <button
-                onClick={() => setActiveView('cameras')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'cameras' 
-                    ? 'bg-secondary text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Camera className="h-4 w-4 inline mr-1.5" />
-                Cámaras
-              </button>
-              <button
-                onClick={() => setActiveView('recordings')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'recordings' 
-                    ? 'bg-secondary text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Film className="h-4 w-4 inline mr-1.5" />
-                Grabaciones
-              </button>
-              <button
-                onClick={() => setActiveView('maps')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'maps' 
-                    ? 'bg-secondary text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Map className="h-4 w-4 inline mr-1.5" />
-                Mapa
-              </button>
-              <button
-                onClick={() => setActiveView('search')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'search' 
-                    ? 'bg-secondary text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <Search className="h-4 w-4 inline mr-1.5" />
-                Búsqueda
-              </button>
-              <button
-                onClick={() => setActiveView('playback')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  activeView === 'playback' 
-                    ? 'bg-secondary text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                <PlaySquare className="h-4 w-4 inline mr-1.5" />
-                Sala
-              </button>
-            </nav>
+        <div className="h-full grid grid-cols-[auto_1fr_auto] items-center px-4 gap-4">
+          
+          {/* Left: Branding */}
+          <div className="flex items-center gap-2">
+            {settings?.logo_url ? (
+              <img 
+                src={settings.logo_url} 
+                alt="Logo" 
+                className="h-8 w-8 object-contain rounded"
+              />
+            ) : (
+              <Video className="h-6 w-6 text-primary" />
+            )}
+            <span className="font-semibold text-foreground hidden sm:inline">
+              {settings?.system_title || 'TitanNVR'}
+            </span>
           </div>
           
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            {/* User Role Badge */}
-            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-              user?.role === 'admin' 
-                ? 'bg-red-600 text-white' 
-                : user?.role === 'operator' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-muted text-muted-foreground'
-            }`}>
-              {user?.role === 'admin' && <Shield className="h-3.5 w-3.5" />}
-              {user?.role === 'operator' && <UserCog className="h-3.5 w-3.5" />}
-              {user?.role === 'viewer' && <Eye className="h-3.5 w-3.5" />}
-              <span>{user?.username}</span>
-            </div>
-            
-            {/* Add Camera - Only for non-viewers */}
-            {canEdit && (
-              <Button 
-                onClick={() => setShowAddDialog(true)}
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 h-8"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Agregar
-              </Button>
-            )}
-            
+          {/* Center: Navigation */}
+          <nav className="flex items-center justify-center gap-1">
+            <button
+              onClick={() => setActiveView('cameras')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeView === 'cameras' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <Camera className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden md:inline">Cámaras</span>
+            </button>
+            <button
+              onClick={() => setActiveView('recordings')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeView === 'recordings' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <Film className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden md:inline">Grabaciones</span>
+            </button>
+            <button
+              onClick={() => setActiveView('maps')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeView === 'maps' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <Map className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden md:inline">Mapa</span>
+            </button>
+            <button
+              onClick={() => setActiveView('search')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeView === 'search' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <Search className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden md:inline">Búsqueda</span>
+            </button>
+            <button
+              onClick={() => setActiveView('playback')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeView === 'playback' 
+                  ? 'bg-primary text-primary-foreground' 
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+              }`}
+            >
+              <PlaySquare className="h-4 w-4 inline mr-1.5" />
+              <span className="hidden md:inline">Sala</span>
+            </button>
+          </nav>
+          
+          {/* Right: System Actions */}
+          <div className="flex items-center gap-1">
             {/* Settings - Only for admin */}
             {isAdmin && (
               <button
                 onClick={() => setShowSettingsDialog(true)}
                 className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                title="Configuración"
               >
                 <Settings className="h-4 w-4" />
               </button>
             )}
             
-            {/* Kiosk Mode Button */}
+            {/* Kiosk Mode */}
             <button
               onClick={() => window.open('/kiosk', '_blank')}
               className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              title="Modo Kiosco (Video Wall)"
+              title="Modo Kiosco"
             >
               <MonitorPlay className="h-4 w-4" />
             </button>
@@ -310,6 +284,7 @@ function Dashboard() {
             <button
               onClick={logout}
               className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-secondary transition-colors"
+              title="Cerrar Sesión"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -323,7 +298,11 @@ function Dashboard() {
       ) : activeView === 'playback' ? (
         <IncidentWorkspace onBack={() => setActiveView('cameras')} />
       ) : (
-      <main className="flex-1 p-2">
+      <main className={`flex-1 ${
+        activeView === 'cameras' && cameraViewMode === 'matrix' 
+          ? 'p-2 h-[calc(100vh-3.5rem)] overflow-hidden' 
+          : 'p-2'
+      }`}>
         {activeView === 'recordings' ? (
           <RecordingsView />
         ) : activeView === 'maps' ? (
@@ -395,22 +374,26 @@ function Dashboard() {
                 <div className="flex items-center gap-1 p-1 rounded-md bg-secondary border border-border">
                   <button
                     onClick={() => setCameraViewMode('matrix')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                       cameraViewMode === 'matrix' 
                         ? 'bg-blue-600 text-white' 
-                        : 'text-muted-foreground hover:text-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
                     }`}
+                    title="Vista Matriz - Layouts personalizados"
                   >
+                    <LayoutGrid className="h-3.5 w-3.5" />
                     Matrix
                   </button>
                   <button
                     onClick={() => setCameraViewMode('list')}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
                       cameraViewMode === 'list' 
                         ? 'bg-blue-600 text-white' 
-                        : 'text-muted-foreground hover:text-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
                     }`}
+                    title="Vista Lista - Administración masiva"
                   >
+                    <List className="h-3.5 w-3.5" />
                     Lista
                   </button>
                 </div>
@@ -480,6 +463,7 @@ function Dashboard() {
                 availableCameras={cameras}
                 camerasStatus={cameraStatuses}
                 onEditCamera={canEdit ? (cam) => setEditingCamera(cam) : undefined}
+                className="h-[calc(100vh-8rem)]"
               />
             )}
 
