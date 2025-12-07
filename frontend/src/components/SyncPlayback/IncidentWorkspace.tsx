@@ -194,7 +194,7 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
               />
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">
-              Mostrando eventos con video de los últimos 7 días
+              Mostrando eventos con video de las últimas 24 horas
             </p>
           </div>
 
@@ -205,11 +205,19 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : eventsWithClips.length === 0 ? (
-              <div className="p-4 text-center">
-                <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">
-                  No hay eventos con video disponibles
+              <div className="p-6 text-center">
+                <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-sm font-medium text-foreground mb-2">
+                  No hay eventos de IA detectados
                 </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Esta sala muestra solo eventos detectados por análisis de video.
+                </p>
+                <div className="p-3 bg-muted/50 rounded-lg text-left">
+                  <p className="text-xs text-muted-foreground">
+                    💡 <strong>Tip:</strong> Ve a la sección <strong>"Grabaciones"</strong> para ver el video continuo grabado por tus cámaras.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="p-2 space-y-1">

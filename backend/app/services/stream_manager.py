@@ -67,36 +67,36 @@ class StreamManager:
             return url
         
         # HTTP streams (MJPEG/JPEG) need ffmpeg transcoding
-        # Use MAXIMUM STABILITY MODE for IP Webcam and similar sources
+        # Use LOW LATENCY MODE for IP Webcam and similar sources
         if url.startswith(('http://', 'https://')):
-            logger.warning(f"Using STABILITY MODE for HTTP stream: {stream_name}")
+            logger.warning(f"Using LOW LATENCY MODE for HTTP stream: {stream_name}")
             logger.info(f"HTTP source: {url}")
             
-            # STABILITY-FIRST FFmpeg command:
-            # -re: Read at native speed (CRITICAL - prevents ffmpeg from reading too fast)
-            # -an: Disable audio (cause #1 of failures in cheap cameras/IP Webcam)
-            # -r 15: Force 15 fps output (stabilizes irregular input framerate)
-            # -c:v libx264: Software encoder (always works)
-            # -preset ultrafast: Minimum CPU usage
-            # -pix_fmt yuv420p: Standard pixel format for compatibility
+            # LOW LATENCY FFmpeg command:
+            # -fflags nobuffer: Disable input buffering
+            # -flags low_delay: Minimize codec latency
+            # -use_wallclock_as_timestamps 1: Key for IP Webcam (uses system time)
+            # -an: Disable audio (cause #1 of failures in cheap cameras)
+            # -r 15: Force 15 fps output (stabilizes irregular framerate)
+            # -tune zerolatency: Optimize encoder for streaming
+            # -g 30: Keyframe every 2s for fast recovery
             # -f mpegts: MPEG-TS container (tolerant of timestamp issues)
             #
-            # INTENTIONALLY OMITTED (cause instability with HTTP sources):
-            # - NO -tune zerolatency (requires consistent timestamps)
-            # - NO -g (keyframe interval - fails with variable fps)
-            # - NO -crf/-maxrate/-bufsize (rate control - stalls with irregular input)
+            # REMOVED: -re (causes latency buildup with live sources)
             ffmpeg_cmd = (
                 f"exec:ffmpeg -hide_banner -loglevel warning "
-                f"-re "
+                f"-fflags nobuffer -flags low_delay -strict experimental "
+                f"-use_wallclock_as_timestamps 1 "
                 f"-i {url} "
                 f"-c:v libx264 "
-                f"-preset ultrafast "
+                f"-preset ultrafast -tune zerolatency "
                 f"-r 15 "
                 f"-an "
+                f"-g 30 "
                 f"-pix_fmt yuv420p "
                 f"-f mpegts -"
             )
-            logger.info(f"FFmpeg command (stability mode): {ffmpeg_cmd}")
+            logger.info(f"FFmpeg command (low latency): {ffmpeg_cmd}")
             return ffmpeg_cmd
         
         # Unknown format, return as-is and let Go2RTC handle it
@@ -123,16 +123,23 @@ class StreamManager:
         is_http = url.startswith(('http://', 'https://'))
         
         if is_http:
-            # HTTP sources (MJPEG/IP Webcam) - COMPATIBILITY MODE
-            logger.warning(f"Compatibility mode FFmpeg for {stream_name} ({quality})")
+            # HTTP sources (MJPEG/IP Webcam) - LOW LATENCY MODE
+            logger.warning(f"Low latency FFmpeg for {stream_name} ({quality})")
+            
+            # Common low-latency input flags
+            input_flags = (
+                f"-fflags nobuffer -flags low_delay -strict experimental "
+                f"-use_wallclock_as_timestamps 1 "
+                f"-i {url} "
+            )
             
             if quality == "sub":
                 # Sub-stream: Scale down for grid view
                 return (
                     f"exec:ffmpeg -hide_banner -loglevel warning "
-                    f"-re -i {url} "
-                    f"-an "
-                    f"-c:v libx264 -preset ultrafast "
+                    f"{input_flags}"
+                    f"-c:v libx264 -preset ultrafast -tune zerolatency "
+                    f"-r 15 -an -g 30 "
                     f"-vf scale=640:-2 "
                     f"-pix_fmt yuv420p "
                     f"-f mpegts -"
@@ -141,9 +148,9 @@ class StreamManager:
                 # Main stream: Full resolution
                 return (
                     f"exec:ffmpeg -hide_banner -loglevel warning "
-                    f"-re -i {url} "
-                    f"-an "
-                    f"-c:v libx264 -preset ultrafast "
+                    f"{input_flags}"
+                    f"-c:v libx264 -preset ultrafast -tune zerolatency "
+                    f"-r 15 -an -g 30 "
                     f"-pix_fmt yuv420p "
                     f"-f mpegts -"
                 )

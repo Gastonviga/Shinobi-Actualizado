@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { 
   Camera, 
@@ -23,9 +23,11 @@ import { AddCameraDialog } from '@/components/AddCameraDialog'
 import { EditCameraDialog } from '@/components/EditCameraDialog'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { RecordingsView } from '@/components/RecordingsView'
-import { MapsView } from '@/components/MapsView'
-import { SmartSearch } from '@/components/SmartSearch/SmartSearch'
-import { IncidentWorkspace } from '@/components/SyncPlayback/IncidentWorkspace'
+
+// Lazy load heavy views for faster initial navigation
+const MapsView = lazy(() => import('@/components/MapsView').then(m => ({ default: m.MapsView })))
+const SmartSearch = lazy(() => import('@/components/SmartSearch/SmartSearch').then(m => ({ default: m.SmartSearch })))
+const IncidentWorkspace = lazy(() => import('@/components/SyncPlayback/IncidentWorkspace').then(m => ({ default: m.IncidentWorkspace })))
 import { LoginPage } from '@/components/LoginPage'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { 
@@ -40,6 +42,18 @@ import {
 import { MatrixContainer } from '@/components/VideoMatrix'
 import { KioskPage } from '@/components/Kiosk'
 import { ChevronLeft, ChevronRight, Filter, CheckSquare, Square, X, Trash2, LayoutGrid, List } from 'lucide-react'
+
+// Loading fallback for lazy-loaded views
+function ViewLoadingFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <span className="text-sm text-muted-foreground">Cargando...</span>
+      </div>
+    </div>
+  )
+}
 
 function Dashboard() {
   const { user, logout, settings } = useAuth()
@@ -294,9 +308,13 @@ function Dashboard() {
 
       {/* Main Content */}
       {activeView === 'search' ? (
-        <SmartSearch onBack={() => setActiveView('cameras')} />
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <SmartSearch onBack={() => setActiveView('cameras')} />
+        </Suspense>
       ) : activeView === 'playback' ? (
-        <IncidentWorkspace onBack={() => setActiveView('cameras')} />
+        <Suspense fallback={<ViewLoadingFallback />}>
+          <IncidentWorkspace onBack={() => setActiveView('cameras')} />
+        </Suspense>
       ) : (
       <main className={`flex-1 ${
         activeView === 'cameras' && cameraViewMode === 'matrix' 
@@ -306,7 +324,9 @@ function Dashboard() {
         {activeView === 'recordings' ? (
           <RecordingsView />
         ) : activeView === 'maps' ? (
-          <MapsView />
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <MapsView />
+          </Suspense>
         ) : (
           <>
             {/* Empty State */}

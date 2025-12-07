@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { 
   Search, 
   Calendar,
-  Camera,
+  Camera as CameraIcon,
   User,
   Car,
   Dog,
@@ -17,9 +17,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card } from '@/components/ui/card'
 import { 
   getSearchLabels, 
-  getSearchCameras,
+  getCameras,
   type LabelInfo,
-  type CameraEventInfo,
+  type Camera,
   type SearchFilters as SearchFiltersType
 } from '@/lib/api'
 
@@ -53,7 +53,7 @@ const LABEL_NAMES: Record<string, string> = {
 export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
   // Filter options from API
   const [availableLabels, setAvailableLabels] = useState<LabelInfo[]>([])
-  const [availableCameras, setAvailableCameras] = useState<CameraEventInfo[]>([])
+  const [availableCameras, setAvailableCameras] = useState<Camera[]>([])  // All cameras, not just with events
   const [isLoadingOptions, setIsLoadingOptions] = useState(true)
 
   // Selected filters
@@ -72,12 +72,13 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
   const loadFilterOptions = async () => {
     setIsLoadingOptions(true)
     try {
-      const [labelsRes, camerasRes] = await Promise.all([
+      // Get ALL cameras (not just those with events) so user can always select any camera
+      const [labelsRes, camerasData] = await Promise.all([
         getSearchLabels(),
-        getSearchCameras()
+        getCameras()  // Full camera list instead of getSearchCameras()
       ])
       setAvailableLabels(labelsRes.labels)
-      setAvailableCameras(camerasRes.cameras)
+      setAvailableCameras(camerasData)
     } catch (err) {
       console.error('Failed to load filter options:', err)
     } finally {
@@ -235,25 +236,27 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
       {/* Cameras */}
       <div className="space-y-2">
         <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Camera className="w-3.5 h-3.5" />
+          <CameraIcon className="w-3.5 h-3.5" />
           Cámaras ({selectedCameras.size}/{availableCameras.length})
         </Label>
         <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
           {availableCameras.map((cam) => (
             <label
-              key={cam.camera}
+              key={cam.id}
               className="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer"
             >
               <Checkbox
-                checked={selectedCameras.has(cam.camera)}
-                onCheckedChange={() => toggleCamera(cam.camera)}
+                checked={selectedCameras.has(cam.name)}
+                onCheckedChange={() => toggleCamera(cam.name)}
               />
-              <span className="text-xs text-foreground flex-1 truncate">{cam.camera}</span>
-              <span className="text-[10px] text-muted-foreground">{cam.event_count}</span>
+              <span className="text-xs text-foreground flex-1 truncate">{cam.name}</span>
+              {cam.group && (
+                <span className="text-[10px] text-muted-foreground">{cam.group}</span>
+              )}
             </label>
           ))}
           {availableCameras.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-2">Sin cámaras</p>
+            <p className="text-xs text-muted-foreground text-center py-2">Sin cámaras configuradas</p>
           )}
         </div>
       </div>

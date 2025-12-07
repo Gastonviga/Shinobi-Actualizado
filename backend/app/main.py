@@ -81,6 +81,46 @@ async def sync_cameras_to_go2rtc():
         logger.info(f"✅ Sync complete: {synced} synced, {failed} failed")
 
 
+async def sync_cameras_to_frigate():
+    """
+    Sync all cameras from database to Frigate.
+    
+    This runs on startup to ensure Frigate has all camera streams
+    configured (in case Frigate container restarted and lost config).
+    """
+    from app.services.config_generator import sync_frigate_config
+    
+    logger.info("🔄 Syncing cameras to Frigate...")
+    
+    async with async_session_maker() as session:
+        result = await session.execute(select(Camera).where(Camera.is_active == True))
+        cameras = result.scalars().all()
+        
+        if not cameras:
+            logger.info("📷 No cameras to sync to Frigate")
+            return
+        
+        camera_dicts = [
+            {
+                "name": c.name,
+                "is_active": c.is_active,
+                "main_stream_url": c.main_stream_url,
+                "sub_stream_url": c.sub_stream_url,
+                "retention_days": c.retention_days,
+                "recording_mode": c.recording_mode,
+                "event_retention_days": c.event_retention_days,
+                "zones_config": c.zones_config,
+            }
+            for c in cameras
+        ]
+        
+        try:
+            result = await sync_frigate_config(camera_dicts, restart=True)
+            logger.info(f"✅ Frigate sync complete: {result.get('cameras_configured', 0)} cameras configured")
+        except Exception as e:
+            logger.warning(f"⚠️ Frigate sync failed (may not be running): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler - Enterprise v2.0."""
@@ -99,6 +139,9 @@ async def lifespan(app: FastAPI):
     
     # Sync cameras to Go2RTC
     await sync_cameras_to_go2rtc()
+    
+    # Sync cameras to Frigate (ensures detection is configured)
+    await sync_cameras_to_frigate()
     
     # Start background task for cloud sync (every 1 hour)
     cloud_sync_task = asyncio.create_task(periodic_cloud_sync(interval_hours=1))

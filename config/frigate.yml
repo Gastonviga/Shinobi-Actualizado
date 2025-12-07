@@ -48,11 +48,46 @@ objects:
       min_score: 0.5
       threshold: 0.7
 go2rtc:
-  streams: {}
+  streams:
+    celular_prueba_sub: rtsp://go2rtc:8554/celular_prueba_sub
+    celular_prueba_main: rtsp://go2rtc:8554/celular_prueba_main
 ui:
   timezone: America/Argentina/Buenos_Aires
 logger:
   default: info
   logs:
     frigate.event: debug
-cameras: {}
+cameras:
+  celular_prueba:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://go2rtc:8554/celular_prueba_sub
+          roles:
+            - detect
+        - path: rtsp://go2rtc:8554/celular_prueba_main
+          roles:
+            - record
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+    record:
+      enabled: true
+      retain:
+        days: 7
+        mode: active_objects
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 14
+    snapshots:
+      enabled: true
+      retain:
+        default: 14
+    objects:
+      track:
+        - person
