@@ -162,25 +162,25 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
 
   if (isLoadingOptions) {
     return (
-      <Card className="p-4 bg-zinc-900/50 border-zinc-800">
+      <Card className="p-4 bg-card border-border">
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       </Card>
     )
   }
 
   return (
-    <Card className="p-4 bg-zinc-900/50 border-zinc-800 space-y-5">
+    <Card className="p-4 bg-card border-border space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Search className="w-5 h-5 text-blue-400" />
-          <h2 className="font-semibold text-zinc-100">Filtros</h2>
+          <Search className="w-5 h-5 text-primary" />
+          <h2 className="font-semibold text-foreground">Filtros</h2>
         </div>
         <button
           onClick={handleReset}
-          className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
+          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
         >
           <RotateCcw className="w-3 h-3" />
           Limpiar
@@ -189,27 +189,27 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
 
       {/* Date Range */}
       <div className="space-y-2">
-        <Label className="text-xs text-zinc-400 flex items-center gap-1.5">
+        <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5" />
           Rango de Fechas
         </Label>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <span className="text-[10px] text-zinc-500">Desde</span>
+            <span className="text-[10px] text-muted-foreground">Desde</span>
             <Input
               type="datetime-local"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-xs h-8"
+              className="bg-muted border-border text-xs h-8"
             />
           </div>
           <div>
-            <span className="text-[10px] text-zinc-500">Hasta</span>
+            <span className="text-[10px] text-muted-foreground">Hasta</span>
             <Input
               type="datetime-local"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-xs h-8"
+              className="bg-muted border-border text-xs h-8"
             />
           </div>
         </div>
@@ -224,7 +224,7 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
             <button
               key={hours}
               onClick={() => setQuickRange(hours)}
-              className="px-2 py-0.5 text-[10px] rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-colors"
+              className="px-2 py-0.5 text-[10px] rounded bg-muted text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             >
               Últimas {label}
             </button>
@@ -234,7 +234,7 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
 
       {/* Cameras */}
       <div className="space-y-2">
-        <Label className="text-xs text-zinc-400 flex items-center gap-1.5">
+        <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Camera className="w-3.5 h-3.5" />
           Cámaras ({selectedCameras.size}/{availableCameras.length})
         </Label>
@@ -242,25 +242,25 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
           {availableCameras.map((cam) => (
             <label
               key={cam.camera}
-              className="flex items-center gap-2 p-1.5 rounded hover:bg-zinc-800/50 cursor-pointer"
+              className="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer"
             >
               <Checkbox
                 checked={selectedCameras.has(cam.camera)}
                 onCheckedChange={() => toggleCamera(cam.camera)}
               />
-              <span className="text-xs text-zinc-300 flex-1 truncate">{cam.camera}</span>
-              <span className="text-[10px] text-zinc-500">{cam.event_count}</span>
+              <span className="text-xs text-foreground flex-1 truncate">{cam.camera}</span>
+              <span className="text-[10px] text-muted-foreground">{cam.event_count}</span>
             </label>
           ))}
           {availableCameras.length === 0 && (
-            <p className="text-xs text-zinc-500 text-center py-2">Sin cámaras</p>
+            <p className="text-xs text-muted-foreground text-center py-2">Sin cámaras</p>
           )}
         </div>
       </div>
 
       {/* Object Labels */}
       <div className="space-y-2">
-        <Label className="text-xs text-zinc-400">Objetos Detectados</Label>
+        <Label className="text-xs text-muted-foreground">Objetos Detectados</Label>
         <div className="flex flex-wrap gap-1.5">
           {availableLabels.map((labelInfo) => {
             const Icon = LABEL_ICONS[labelInfo.label] || User
@@ -272,7 +272,7 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
                   isSelected
                     ? 'text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    : 'bg-muted text-muted-foreground hover:bg-accent'
                 }`}
                 style={{
                   backgroundColor: isSelected ? labelInfo.color : undefined,
@@ -280,14 +280,14 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
               >
                 <Icon className="w-3.5 h-3.5" />
                 {LABEL_NAMES[labelInfo.label] || labelInfo.label}
-                <span className={`text-[10px] ${isSelected ? 'text-white/70' : 'text-zinc-500'}`}>
+                <span className={`text-[10px] ${isSelected ? 'text-white/70' : 'text-muted-foreground'}`}>
                   {labelInfo.count}
                 </span>
               </button>
             )
           })}
           {availableLabels.length === 0 && (
-            <p className="text-xs text-zinc-500">Sin etiquetas</p>
+            <p className="text-xs text-muted-foreground">Sin etiquetas</p>
           )}
         </div>
       </div>
@@ -295,8 +295,8 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
       {/* Min Score */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs text-zinc-400">Confianza Mínima</Label>
-          <span className="text-xs font-medium text-zinc-200">{minScore}%</span>
+          <Label className="text-xs text-muted-foreground">Confianza Mínima</Label>
+          <span className="text-xs font-medium text-foreground">{minScore}%</span>
         </div>
         <input
           type="range"
@@ -304,22 +304,22 @@ export function SearchFilters({ onSearch, isSearching }: SearchFiltersProps) {
           max="100"
           value={minScore}
           onChange={(e) => setMinScore(parseInt(e.target.value))}
-          className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+          className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
         />
-        <div className="flex justify-between text-[10px] text-zinc-500">
+        <div className="flex justify-between text-[10px] text-muted-foreground">
           <span>0%</span>
           <span>100%</span>
         </div>
       </div>
 
       {/* Has Clip Only */}
-      <label className="flex items-center gap-2 p-2 rounded-lg bg-zinc-800/50 cursor-pointer hover:bg-zinc-800">
+      <label className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted">
         <Checkbox
           checked={hasClipOnly}
           onCheckedChange={(checked) => setHasClipOnly(!!checked)}
         />
-        <Film className="w-4 h-4 text-zinc-500" />
-        <span className="text-xs text-zinc-300">Solo con video</span>
+        <Film className="w-4 h-4 text-muted-foreground" />
+        <span className="text-xs text-foreground">Solo con video</span>
       </label>
 
       {/* Search Button */}

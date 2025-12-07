@@ -54,6 +54,7 @@ export function EventTimeline({ cameraName, onEventSelect, hours = 24 }: EventTi
   const [eventDetail, setEventDetail] = useState<EventDetail | null>(null)
   const [hoveredEvent, setHoveredEvent] = useState<TimelineEvent | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 }) // Track size for redraw
   
   // Time range state
   const [timeOffset, setTimeOffset] = useState(0) // Hours offset from now
@@ -90,6 +91,28 @@ export function EventTimeline({ cameraName, onEventSelect, hours = 24 }: EventTi
     const interval = setInterval(fetchTimeline, 30000)
     return () => clearInterval(interval)
   }, [fetchTimeline])
+  
+  // ResizeObserver to handle container size changes (e.g., fullscreen toggle)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        // Only update if size actually changed to avoid infinite loops
+        if (width !== canvasSize.width || height !== canvasSize.height) {
+          setCanvasSize({ width, height })
+        }
+      }
+    })
+    
+    resizeObserver.observe(container)
+    
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [canvasSize.width, canvasSize.height])
   
   // Draw timeline on canvas
   useEffect(() => {
@@ -181,7 +204,7 @@ export function EventTimeline({ cameraName, onEventSelect, hours = 24 }: EventTi
       ctx.fillText('Sin eventos detectados', width / 2, barY + barHeight / 2 + 4)
     }
     
-  }, [events, startTime, endTime, hours, hoveredEvent, selectedEvent])
+  }, [events, startTime, endTime, hours, hoveredEvent, selectedEvent, canvasSize])
   
   // Handle click on timeline
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {

@@ -149,25 +149,57 @@ class StreamManager:
             logger.info(f"PATCH response: {response.status_code}")
             return response.status_code == 200
     
-    async def _add_stream_via_api(self, stream_id: str, url: str) -> bool:
+    async def _add_stream_via_api(self, stream_id: str, url: str, retries: int = 3) -> bool:
         """
         Add/update a stream via Go2RTC HTTP API (immediate hot-reload).
         
         Uses PUT /api/streams?src={name}&url={url} for immediate activation.
         This is the PRIMARY method for adding streams - no container restart needed.
+        
+        Args:
+            stream_id: The stream identifier
+            url: The stream URL (or exec:ffmpeg command)
+            retries: Number of retry attempts on failure
         """
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                # Go2RTC PUT /api/streams - immediate hot-reload
-                response = await client.put(
-                    f"{self.go2rtc_url}/api/streams",
-                    params={"src": stream_id, "url": url}
-                )
-                logger.info(f"PUT /api/streams {stream_id}: status={response.status_code}")
-                return response.status_code in [200, 201]
-        except Exception as e:
-            logger.error(f"Error adding stream via API {stream_id}: {e}")
-            return False
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    # Go2RTC PUT /api/streams - immediate hot-reload
+                    response = await client.put(
+                        f"{self.go2rtc_url}/api/streams",
+                        params={"src": stream_id, "url": url}
+                    )
+                    logger.info(f"PUT /api/streams {stream_id}: status={response.status_code} (attempt {attempt + 1})")
+                    
+                    if response.status_code in [200, 201]:
+                        # Verify stream was added by checking streams list
+                        await asyncio.sleep(0.5)  # Brief delay for Go2RTC to process
+                        verify_response = await client.get(f"{self.go2rtc_url}/api/streams")
+                        if verify_response.status_code == 200:
+                            streams = verify_response.json()
+                            if stream_id in streams:
+                                logger.info(f"Stream {stream_id} verified active")
+                                return True
+                        return True  # Trust the 200 even if verify fails
+                    
+                    # Retry on server errors
+                    if response.status_code >= 500 and attempt < retries - 1:
+                        logger.warning(f"Server error, retrying... ({attempt + 1}/{retries})")
+                        await asyncio.sleep(1)
+                        continue
+                        
+                    return False
+                    
+            except httpx.TimeoutException:
+                logger.warning(f"Timeout adding stream {stream_id}, attempt {attempt + 1}/{retries}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
+            except Exception as e:
+                logger.error(f"Error adding stream via API {stream_id}: {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(1)
+        
+        return False
     
     async def _remove_stream_via_api(self, stream_id: str) -> bool:
         """

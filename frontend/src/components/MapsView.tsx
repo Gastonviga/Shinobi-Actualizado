@@ -237,7 +237,7 @@ export function MapsView() {
   if (loading && maps.length === 0) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-zinc-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -245,17 +245,17 @@ export function MapsView() {
   return (
     <div className="h-full flex flex-col">
       {/* Header Bar */}
-      <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800 mb-3">
+      <div className="flex items-center justify-between p-3 bg-card rounded-lg border border-border mb-3">
         <div className="flex items-center gap-3">
           <MapIcon className="h-5 w-5 text-blue-500" />
-          <span className="font-medium text-zinc-200">Mapas Interactivos</span>
+          <span className="font-medium text-foreground">Mapas Interactivos</span>
           
           {/* Map Selector */}
           {maps.length > 0 && (
             <select
               value={selectedMap?.id || ''}
               onChange={(e) => handleSelectMap(Number(e.target.value))}
-              className="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200"
+              className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm text-foreground"
             >
               {maps.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
@@ -311,7 +311,7 @@ export function MapsView() {
           {selectedMap ? (
             <div 
               ref={mapContainerRef}
-              className="relative w-full h-full rounded-lg overflow-hidden border border-zinc-800 bg-zinc-900"
+              className="relative w-full h-full rounded-lg overflow-hidden border border-border bg-black"
               onDragOver={handleDragOver}
               onDrop={handleDrop}
             >
@@ -369,8 +369,8 @@ export function MapsView() {
 
                     {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
-                      <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
-                        <p className="text-sm font-medium text-zinc-100">{camera.name}</p>
+                      <div className="bg-popover backdrop-blur-sm border border-border rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                        <p className="text-sm font-medium text-popover-foreground">{camera.name}</p>
                         <div className="flex items-center gap-2 mt-1">
                           {hasActiveAlert && alertLabel && (
                             <Badge variant="destructive" className="text-xs py-0 animate-pulse">
@@ -413,16 +413,16 @@ export function MapsView() {
 
               {/* Edit Mode Hint */}
               {isEditMode && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-4 py-2 text-sm text-zinc-300">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-popover/90 backdrop-blur-sm border border-border rounded-lg px-4 py-2 text-sm text-foreground">
                   Arrastra las cámaras desde el panel derecho o reposiciónalas en el mapa
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full bg-zinc-900/50 rounded-lg border border-zinc-800">
-              <MapIcon className="h-16 w-16 text-zinc-700 mb-4" />
-              <h3 className="text-lg font-medium text-zinc-300 mb-2">No hay mapas configurados</h3>
-              <p className="text-sm text-zinc-500 mb-4">Crea un mapa para comenzar a posicionar cámaras</p>
+            <div className="flex flex-col items-center justify-center h-full bg-card rounded-lg border border-border">
+              <MapIcon className="h-16 w-16 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">No hay mapas configurados</h3>
+              <p className="text-sm text-muted-foreground mb-4">Crea un mapa para comenzar a posicionar cámaras</p>
               {isAdmin && (
                 <Button onClick={() => setShowCreateDialog(true)} className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="h-4 w-4 mr-2" />
@@ -435,20 +435,20 @@ export function MapsView() {
 
         {/* Camera List Panel (Edit Mode Only) */}
         {isEditMode && selectedMap && (
-          <div className="w-64 bg-zinc-900/50 rounded-lg border border-zinc-800 flex flex-col">
-            <div className="p-3 border-b border-zinc-800">
-              <h3 className="font-medium text-zinc-200 flex items-center gap-2">
+          <div className="w-64 bg-card rounded-lg border border-border flex flex-col">
+            <div className="p-3 border-b border-border">
+              <h3 className="font-medium text-foreground flex items-center gap-2">
                 <Camera className="h-4 w-4 text-blue-500" />
                 Cámaras Disponibles
               </h3>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Arrastra al mapa para posicionar
               </p>
             </div>
             
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {unpositionedCameras.length === 0 ? (
-                <p className="text-sm text-zinc-500 text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
                   Todas las cámaras están posicionadas
                 </p>
               ) : (
@@ -457,11 +457,11 @@ export function MapsView() {
                     key={camera.id}
                     draggable
                     onDragStart={() => handleDragStart(camera)}
-                    className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-lg cursor-move hover:bg-zinc-800 transition-colors group"
+                    className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg cursor-move hover:bg-muted transition-colors group"
                   >
-                    <GripVertical className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400" />
+                    <GripVertical className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
                     <Camera className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm text-zinc-300 truncate flex-1">{camera.name}</span>
+                    <span className="text-sm text-foreground truncate flex-1">{camera.name}</span>
                   </div>
                 ))
               )}
@@ -477,39 +477,39 @@ export function MapsView() {
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowCreateDialog(false)}
           />
-          <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-zinc-100">Crear Nuevo Mapa</h3>
-              <button onClick={() => setShowCreateDialog(false)} className="text-zinc-400 hover:text-zinc-200">
+              <h3 className="text-lg font-semibold text-foreground">Crear Nuevo Mapa</h3>
+              <button onClick={() => setShowCreateDialog(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">Nombre del Mapa</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Nombre del Mapa</label>
                 <input
                   type="text"
                   value={newMapName}
                   onChange={(e) => setNewMapName(e.target.value)}
                   placeholder="Ej: Planta Baja, Estacionamiento"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 placeholder-zinc-500"
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-foreground placeholder-muted-foreground"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">Descripción (opcional)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Descripción (opcional)</label>
                 <input
                   type="text"
                   value={newMapDescription}
                   onChange={(e) => setNewMapDescription(e.target.value)}
                   placeholder="Descripción del área"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-200 placeholder-zinc-500"
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-foreground placeholder-muted-foreground"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-1">Imagen del Plano</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Imagen del Plano</label>
                 <div className="relative">
                   <input
                     type="file"
@@ -520,19 +520,19 @@ export function MapsView() {
                   />
                   <label
                     htmlFor="map-image-input"
-                    className="flex items-center justify-center gap-2 w-full p-4 border-2 border-dashed border-zinc-700 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
+                    className="flex items-center justify-center gap-2 w-full p-4 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition-colors"
                   >
                     {newMapImage ? (
-                      <span className="text-sm text-zinc-300">{newMapImage.name}</span>
+                      <span className="text-sm text-foreground">{newMapImage.name}</span>
                     ) : (
                       <>
-                        <Upload className="h-5 w-5 text-zinc-500" />
-                        <span className="text-sm text-zinc-500">Seleccionar imagen</span>
+                        <Upload className="h-5 w-5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Seleccionar imagen</span>
                       </>
                     )}
                   </label>
                 </div>
-                <p className="text-xs text-zinc-500 mt-1">JPG, PNG, WebP o SVG. Máximo 10MB.</p>
+                <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP o SVG. Máximo 10MB.</p>
               </div>
             </div>
 
@@ -569,16 +569,16 @@ export function MapsView() {
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowDeleteConfirm(false)}
           />
-          <div className="relative bg-zinc-900 border border-zinc-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
             <div className="flex justify-center mb-4">
-              <div className="p-3 rounded-full bg-red-500/10">
-                <AlertCircle className="w-8 h-8 text-red-500" />
+              <div className="p-3 rounded-full bg-destructive/10">
+                <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
             </div>
-            <h3 className="text-lg font-semibold text-center text-zinc-100 mb-2">
+            <h3 className="text-lg font-semibold text-center text-foreground mb-2">
               Eliminar Mapa
             </h3>
-            <p className="text-sm text-zinc-400 text-center mb-4">
+            <p className="text-sm text-muted-foreground text-center mb-4">
               ¿Eliminar el mapa "{selectedMap.name}"? Las cámaras se desasignarán pero no se eliminarán.
             </p>
             <div className="flex gap-3">

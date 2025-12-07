@@ -7,7 +7,8 @@ import {
   getStoredUser, 
   isAuthenticated,
   getPublicSettings,
-  getCurrentUser
+  getCurrentUser,
+  API_URL
 } from '@/lib/api'
 
 interface AuthContextType {
@@ -32,6 +33,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Load public settings (no auth required)
         const publicSettings = await getPublicSettings()
+        
+        // Fix logo_url: if it's a relative path, prefix with backend URL
+        // This is needed because the frontend runs on a different port than the backend
+        if (publicSettings.logo_url && publicSettings.logo_url.startsWith('/')) {
+          // API_URL is like 'http://localhost:8000/api', we need the base
+          const backendBase = API_URL.replace('/api', '')
+          publicSettings.logo_url = `${backendBase}${publicSettings.logo_url}`
+        }
+        
         setSettings(publicSettings)
         
         // Update document title

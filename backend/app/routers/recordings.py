@@ -166,7 +166,7 @@ async def play_recording(file_path: str):
         file_path: Relative path to the recording file
         
     Returns:
-        Video file stream
+        Video file stream with headers optimized for browser playback
     """
     # Try recordings directory first
     full_path = RECORDINGS_BASE_PATH / file_path
@@ -193,10 +193,15 @@ async def play_recording(file_path: str):
                 detail="Access denied"
             )
     
+    # Return with headers optimized for in-browser playback
     return FileResponse(
         path=full_path,
         media_type="video/mp4",
-        filename=full_path.name
+        headers={
+            "Content-Disposition": f"inline; filename=\"{full_path.name}\"",
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-cache",
+        }
     )
 
 

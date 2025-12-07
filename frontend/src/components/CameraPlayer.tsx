@@ -36,6 +36,7 @@ export function CameraPlayer({
   const [isMuted, setIsMuted] = useState(true)
   const [useMjpeg, setUseMjpeg] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
+  const [mjpegKey, setMjpegKey] = useState(0) // Key to force MJPEG img reconnection
 
   // Build stream ID
   const streamId = `${normalizeName(cameraName)}_${quality}`
@@ -72,14 +73,28 @@ export function CameraPlayer({
       setUseMjpeg(true)
       setIsLoading(true)
     } else {
-      setIsLoading(false)
-      setHasError(true)
+      // MJPEG also failed - increment key to force img reconnection
+      // This forces browser to create new connection instead of using cached broken state
+      setMjpegKey(prev => prev + 1)
+      console.log(`[CameraPlayer] MJPEG error, forcing reconnect with new key`)
+      
+      // After 3 MJPEG retries, show error
+      if (mjpegKey >= 2) {
+        setIsLoading(false)
+        setHasError(true)
+      } else {
+        // Give it a moment before retry
+        setTimeout(() => {
+          setIsLoading(true)
+        }, 1000)
+      }
     }
   }
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1)
     setUseMjpeg(false)
+    setMjpegKey(0) // Reset MJPEG retry counter
     setHasError(false)
     setIsLoading(true)
   }
@@ -134,8 +149,10 @@ export function CameraPlayer({
       {/* Video/Image Player - switches between MP4 and MJPEG */}
       {useMjpeg ? (
         // MJPEG fallback - use img tag for motion jpeg
+        // Key prop forces browser to create new connection on error
         <img
-          src={mjpegUrl}
+          key={`mjpeg-${streamId}-${mjpegKey}`}
+          src={`${mjpegUrl}&_t=${mjpegKey}`}
           alt={`Stream: ${cameraName}`}
           className="w-full h-full object-cover"
           onLoad={handleCanPlay}

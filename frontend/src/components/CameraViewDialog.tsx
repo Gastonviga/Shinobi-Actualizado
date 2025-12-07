@@ -241,23 +241,46 @@ function PTZControls({
 export function CameraViewDialog({ camera, isOpen, onClose }: CameraViewDialogProps) {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [ptzError, setPtzError] = useState<string | null>(null)
+  const playerContainerRef = useRef<HTMLDivElement>(null)
+  const dialogContentRef = useRef<HTMLDivElement>(null)
+
+  // Listen for fullscreen changes (including Escape key exit)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
 
   if (!camera) return null
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen()
-      setIsFullscreen(true)
-    } else {
-      document.exitFullscreen()
-      setIsFullscreen(false)
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        // Fullscreen the dialog content (includes player + timeline + controls)
+        const target = dialogContentRef.current
+        if (target) {
+          await target.requestFullscreen()
+          setIsFullscreen(true)
+        }
+      } else {
+        await document.exitFullscreen()
+        setIsFullscreen(false)
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err)
     }
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
-        className="max-w-5xl w-[95vw] h-[85vh] p-0 gap-0 overflow-hidden"
+        ref={dialogContentRef}
+        className={`max-w-5xl w-[95vw] p-0 gap-0 overflow-hidden transition-all ${isFullscreen ? 'h-screen max-w-none w-screen' : 'h-[85vh]'}`}
         onClose={onClose}
       >
         {/* Header */}
@@ -309,7 +332,7 @@ export function CameraViewDialog({ camera, isOpen, onClose }: CameraViewDialogPr
         </div>
 
         {/* Video Player - HD Quality with PTZ Overlay */}
-        <div className="flex-1 bg-black relative">
+        <div ref={playerContainerRef} className="flex-1 bg-black relative">
           <CameraPlayer
             cameraName={camera.name}
             quality="main"

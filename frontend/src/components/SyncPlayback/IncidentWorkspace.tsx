@@ -137,23 +137,23 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
   }, [])
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="h-14 flex-shrink-0 bg-zinc-900 border-b border-zinc-800">
+      <header className="h-14 flex-shrink-0 bg-card border-b border-border">
         <div className="h-full flex items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="sm"
               onClick={onBack}
-              className="text-zinc-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
               Volver
             </Button>
             <div className="flex items-center gap-2">
               <PlaySquare className="h-5 w-5 text-purple-500" />
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-foreground">
                 Reproducción Sincronizada
               </span>
             </div>
@@ -161,14 +161,14 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
           
           {selectedEvents.length > 0 && (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-zinc-400">
+              <span className="text-sm text-muted-foreground">
                 {selectedEvents.length}/{MAX_SELECTED} seleccionados
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={clearSelection}
-                className="text-zinc-400 hover:text-red-400"
+                className="text-muted-foreground hover:text-destructive"
               >
                 <X className="w-4 h-4 mr-1" />
                 Limpiar
@@ -181,19 +181,19 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel - Event Selector */}
-        <aside className="w-80 flex-shrink-0 bg-zinc-900 border-r border-zinc-800 flex flex-col">
+        <aside className="w-80 flex-shrink-0 bg-card border-r border-border flex flex-col">
           {/* Search Bar */}
-          <div className="p-3 border-b border-zinc-800">
+          <div className="p-3 border-b border-border">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar eventos..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-zinc-800 border-zinc-700 text-sm"
+                className="pl-9 bg-muted border-border text-sm"
               />
             </div>
-            <p className="text-[10px] text-zinc-500 mt-2">
+            <p className="text-[10px] text-muted-foreground mt-2">
               Mostrando eventos con video de los últimos 7 días
             </p>
           </div>
@@ -202,12 +202,12 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
           <div className="flex-1 overflow-y-auto">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : eventsWithClips.length === 0 ? (
               <div className="p-4 text-center">
-                <AlertCircle className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
-                <p className="text-sm text-zinc-500">
+                <AlertCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">
                   No hay eventos con video disponibles
                 </p>
               </div>
@@ -224,24 +224,24 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
                       onClick={() => !isDisabled && toggleEventSelection(event)}
                       className={`p-2 cursor-pointer transition-all ${
                         isSelected
-                          ? 'bg-purple-500/20 border-purple-500/50'
+                          ? 'bg-primary/20 border-primary/50'
                           : isDisabled
-                            ? 'bg-zinc-800/30 border-zinc-800 opacity-50 cursor-not-allowed'
-                            : 'bg-zinc-800/50 border-zinc-800 hover:border-zinc-700'
+                            ? 'bg-muted/30 border-border opacity-50 cursor-not-allowed'
+                            : 'bg-muted/50 border-border hover:border-primary/30'
                       }`}
                     >
                       <div className="flex items-start gap-2">
                         {/* Checkbox */}
                         <div className="flex-shrink-0 mt-0.5">
                           {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-purple-400" />
+                            <CheckSquare className="w-4 h-4 text-primary" />
                           ) : (
-                            <Square className="w-4 h-4 text-zinc-600" />
+                            <Square className="w-4 h-4 text-muted-foreground" />
                           )}
                         </div>
 
                         {/* Thumbnail */}
-                        <div className="w-16 h-10 flex-shrink-0 bg-zinc-900 rounded overflow-hidden">
+                        <div className="w-16 h-10 flex-shrink-0 bg-black rounded overflow-hidden">
                           {event.thumbnail_url ? (
                             <img
                               src={event.thumbnail_url}
@@ -251,7 +251,7 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <Film className="w-4 h-4 text-zinc-700" />
+                              <Film className="w-4 h-4 text-muted-foreground" />
                             </div>
                           )}
                         </div>
@@ -263,18 +263,18 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
                               className="w-2 h-2 rounded-full flex-shrink-0"
                               style={{ backgroundColor: event.color }}
                             />
-                            <span className="text-xs font-medium text-zinc-200 truncate">
+                            <span className="text-xs font-medium text-foreground truncate">
                               {LABEL_NAMES[event.label] || event.label}
                             </span>
-                            <span className="text-[10px] text-zinc-500">
+                            <span className="text-[10px] text-muted-foreground">
                               {Math.round(event.score * 100)}%
                             </span>
                           </div>
-                          <div className="flex items-center gap-1 text-[10px] text-zinc-500 mt-0.5">
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
                             <Camera className="w-3 h-3" />
                             <span className="truncate">{event.camera}</span>
                           </div>
-                          <div className="flex items-center gap-1 text-[10px] text-zinc-600 mt-0.5">
+                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground/70 mt-0.5">
                             <Clock className="w-3 h-3" />
                             <span>{date} {time}</span>
                           </div>
@@ -289,15 +289,15 @@ export function IncidentWorkspace({ onBack }: IncidentWorkspaceProps) {
 
           {/* Selection Summary */}
           {selectedEvents.length > 0 && (
-            <div className="p-3 border-t border-zinc-800 bg-zinc-900/50">
-              <div className="text-xs text-zinc-400 mb-2">
+            <div className="p-3 border-t border-border bg-card">
+              <div className="text-xs text-muted-foreground mb-2">
                 Seleccionados ({selectedEvents.length}):
               </div>
               <div className="flex flex-wrap gap-1">
                 {selectedEvents.map(event => (
                   <span
                     key={event.id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-primary/20 text-primary"
                   >
                     {event.camera}
                     <button

@@ -66,10 +66,10 @@ function EventCard({ event, onClick }: EventCardProps) {
   return (
     <Card
       onClick={onClick}
-      className="group relative overflow-hidden bg-zinc-900/50 border-zinc-800 hover:border-zinc-600 cursor-pointer transition-all"
+      className="group relative overflow-hidden bg-card border-border hover:border-primary/50 cursor-pointer transition-all"
     >
       {/* Thumbnail */}
-      <div className="aspect-video bg-zinc-800 relative overflow-hidden">
+      <div className="aspect-video bg-muted relative overflow-hidden">
         {event.thumbnail_url ? (
           <img
             src={event.thumbnail_url}
@@ -82,7 +82,7 @@ function EventCard({ event, onClick }: EventCardProps) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Image className="w-8 h-8 text-zinc-700" />
+            <Image className="w-8 h-8 text-muted-foreground" />
           </div>
         )}
         
@@ -114,20 +114,20 @@ function EventCard({ event, onClick }: EventCardProps) {
       {/* Info */}
       <div className="p-2 space-y-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-xs text-zinc-400">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Camera className="w-3 h-3" />
             <span className="truncate max-w-[120px]">{event.camera}</span>
           </div>
           {event.duration_seconds && (
-            <span className="text-[10px] text-zinc-500">
+            <span className="text-[10px] text-muted-foreground">
               {formatDuration(event.duration_seconds)}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 text-xs text-zinc-500">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="w-3 h-3" />
           <span>{date}</span>
-          <span className="text-zinc-600">•</span>
+          <span className="opacity-50">•</span>
           <span>{time}</span>
         </div>
       </div>
@@ -149,9 +149,9 @@ function EventDetailDialog({ event, isOpen, onClose }: EventDetailDialogProps) {
   
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] bg-zinc-900 border-zinc-800 p-0">
+      <DialogContent className="sm:max-w-[800px] bg-card border-border p-0">
         <DialogHeader className="p-4 pb-0">
-          <DialogTitle className="flex items-center gap-2 text-zinc-100">
+          <DialogTitle className="flex items-center gap-2 text-foreground">
             <div
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: event.color }}
@@ -179,7 +179,7 @@ function EventDetailDialog({ event, isOpen, onClose }: EventDetailDialogProps) {
                 className="w-full h-full object-contain"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-zinc-600">
+              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                 <AlertCircle className="w-12 h-12" />
               </div>
             )}
@@ -187,13 +187,13 @@ function EventDetailDialog({ event, isOpen, onClose }: EventDetailDialogProps) {
           
           {/* Event Details */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-[10px] text-zinc-500 uppercase">Cámara</div>
-              <div className="text-sm font-medium text-zinc-200">{event.camera}</div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <div className="text-[10px] text-muted-foreground uppercase">Cámara</div>
+              <div className="text-sm font-medium text-foreground">{event.camera}</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-[10px] text-zinc-500 uppercase">Objeto</div>
-              <div className="text-sm font-medium text-zinc-200 flex items-center gap-2">
+            <div className="p-3 rounded-lg bg-muted/50">
+              <div className="text-[10px] text-muted-foreground uppercase">Objeto</div>
+              <div className="text-sm font-medium text-foreground flex items-center gap-2">
                 <span
                   className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: event.color }}
@@ -201,27 +201,27 @@ function EventDetailDialog({ event, isOpen, onClose }: EventDetailDialogProps) {
                 {LABEL_NAMES[event.label] || event.label}
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-[10px] text-zinc-500 uppercase">Confianza</div>
-              <div className="text-sm font-medium text-zinc-200">{scorePercent}%</div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <div className="text-[10px] text-muted-foreground uppercase">Confianza</div>
+              <div className="text-sm font-medium text-foreground">{scorePercent}%</div>
             </div>
-            <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-[10px] text-zinc-500 uppercase">Duración</div>
-              <div className="text-sm font-medium text-zinc-200">
+            <div className="p-3 rounded-lg bg-muted/50">
+              <div className="text-[10px] text-muted-foreground uppercase">Duración</div>
+              <div className="text-sm font-medium text-foreground">
                 {formatDuration(event.duration_seconds)}
               </div>
             </div>
           </div>
           
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-zinc-800/50">
-              <div className="text-[10px] text-zinc-500 uppercase">Fecha/Hora</div>
-              <div className="text-sm font-medium text-zinc-200">{date} a las {time}</div>
+            <div className="p-3 rounded-lg bg-muted/50">
+              <div className="text-[10px] text-muted-foreground uppercase">Fecha/Hora</div>
+              <div className="text-sm font-medium text-foreground">{date} a las {time}</div>
             </div>
             {event.zones && (
-              <div className="p-3 rounded-lg bg-zinc-800/50">
-                <div className="text-[10px] text-zinc-500 uppercase">Zonas</div>
-                <div className="text-sm font-medium text-zinc-200">{event.zones}</div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <div className="text-[10px] text-muted-foreground uppercase">Zonas</div>
+                <div className="text-sm font-medium text-foreground">{event.zones}</div>
               </div>
             )}
           </div>
@@ -254,7 +254,7 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-zinc-400">Buscando eventos...</p>
+          <p className="text-sm text-muted-foreground">Buscando eventos...</p>
         </div>
       </div>
     )
@@ -264,9 +264,9 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center max-w-md">
-          <Camera className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-zinc-300 mb-2">Búsqueda Forense</h3>
-          <p className="text-sm text-zinc-500">
+          <Camera className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">Búsqueda Forense</h3>
+          <p className="text-sm text-muted-foreground">
             Usa los filtros de la izquierda para buscar eventos de detección.
             Puedes filtrar por cámara, tipo de objeto, fecha y confianza.
           </p>
@@ -279,9 +279,9 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-zinc-300 mb-2">Sin Resultados</h3>
-          <p className="text-sm text-zinc-500">
+          <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+          <h3 className="text-lg font-medium text-foreground mb-2">Sin Resultados</h3>
+          <p className="text-sm text-muted-foreground">
             No se encontraron eventos con los filtros seleccionados.
           </p>
         </div>
@@ -293,10 +293,10 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
     <div className="flex-1 flex flex-col">
       {/* Results Header */}
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm text-zinc-400">
-          <span className="font-medium text-zinc-200">{results.total}</span> eventos encontrados
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{results.total}</span> eventos encontrados
         </div>
-        <div className="text-xs text-zinc-500">
+        <div className="text-xs text-muted-foreground">
           Página {results.page} de {results.total_pages}
         </div>
       </div>
@@ -314,13 +314,13 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
       
       {/* Pagination */}
       {results.total_pages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-zinc-800">
+        <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-border">
           <Button
             variant="outline"
             size="sm"
             onClick={() => onPageChange(results.page - 1)}
             disabled={results.page <= 1}
-            className="border-zinc-700"
+            className="border-border"
           >
             <ChevronLeft className="w-4 h-4" />
           </Button>
@@ -344,8 +344,8 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
                   onClick={() => onPageChange(pageNum)}
                   className={`w-8 h-8 rounded text-sm ${
                     pageNum === results.page
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-accent'
                   }`}
                 >
                   {pageNum}
@@ -359,7 +359,7 @@ export function SearchResults({ results, isLoading, onPageChange }: SearchResult
             size="sm"
             onClick={() => onPageChange(results.page + 1)}
             disabled={results.page >= results.total_pages}
-            className="border-zinc-700"
+            className="border-border"
           >
             <ChevronRight className="w-4 h-4" />
           </Button>

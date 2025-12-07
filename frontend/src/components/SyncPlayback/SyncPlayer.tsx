@@ -176,13 +176,13 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
 
   if (events.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-zinc-950 rounded-lg border border-zinc-800">
+      <div className="flex-1 flex items-center justify-center bg-card rounded-lg border border-border">
         <div className="text-center">
-          <Camera className="w-16 h-16 text-zinc-700 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-zinc-400 mb-2">
+          <Camera className="w-16 w-16 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">
             Sala de Reproducción
           </h3>
-          <p className="text-sm text-zinc-500 max-w-md">
+          <p className="text-sm text-muted-foreground max-w-md">
             Selecciona hasta 4 eventos de la lista izquierda para reproducirlos de forma sincronizada.
           </p>
         </div>
@@ -191,7 +191,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 rounded-lg border border-zinc-800 overflow-hidden">
+    <div className="flex-1 flex flex-col bg-card rounded-lg border border-border overflow-hidden">
       {/* Video Grid */}
       <div className={`flex-1 grid ${getGridClass(events.length)} gap-1 p-1 bg-black`}>
         {events.map((event, index) => (
@@ -212,8 +212,8 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
                 onEnded={() => handleVideoEnded(index)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-                <span className="text-zinc-600 text-sm">Sin video</span>
+              <div className="w-full h-full flex items-center justify-center bg-black">
+                <span className="text-muted-foreground text-sm">Sin video</span>
               </div>
             )}
 
@@ -258,7 +258,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
       </div>
 
       {/* Master Controls */}
-      <div className="p-3 bg-zinc-900 border-t border-zinc-800 space-y-3">
+      <div className="p-3 bg-card border-t border-border space-y-3">
         {/* Progress Bar */}
         <div className="space-y-1">
           <input
@@ -273,7 +273,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
               background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${progress}%, #3f3f46 ${progress}%, #3f3f46 100%)`
             }}
           />
-          <div className="flex justify-between text-[10px] text-zinc-500">
+          <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(maxDuration)}</span>
           </div>
@@ -301,7 +301,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
               variant="ghost"
               size="sm"
               onClick={syncToStart}
-              className="text-zinc-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
               title="Sincronizar al inicio"
             >
               <SkipBack className="w-4 h-4" />
@@ -312,7 +312,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
               variant="ghost"
               size="sm"
               onClick={syncToStart}
-              className="text-zinc-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
               title="Reiniciar todos"
             >
               <RefreshCw className="w-4 h-4" />
@@ -321,7 +321,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
 
           <div className="flex items-center gap-3">
             {/* Video Count */}
-            <span className="text-xs text-zinc-500">
+            <span className="text-xs text-muted-foreground">
               {events.length} video{events.length !== 1 ? 's' : ''}
             </span>
 
@@ -330,7 +330,7 @@ export function SyncPlayer({ events, onRemoveEvent }: SyncPlayerProps) {
               variant="ghost"
               size="sm"
               onClick={toggleMute}
-              className="text-zinc-400 hover:text-white"
+              className="text-muted-foreground hover:text-foreground"
             >
               {isMuted ? (
                 <VolumeX className="w-4 h-4" />

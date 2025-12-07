@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // API URL - use localhost:8000 for browser access (backend is exposed on this port)
 // In Docker, the browser can't resolve 'backend:8000', so we use localhost
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 // Go2RTC URL for direct stream access from browser
 const GO2RTC_URL = import.meta.env.VITE_GO2RTC_URL || 'http://localhost:1984'

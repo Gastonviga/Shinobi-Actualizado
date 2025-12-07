@@ -37,6 +37,9 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   
+  // Stream activation state (after save, before close)
+  const [isActivating, setIsActivating] = useState(false)
+  
   // Manual form state
   const [formData, setFormData] = useState<CameraCreate>({
     name: '',
@@ -94,6 +97,14 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
         sub_stream_url: formData.sub_stream_url || formData.main_stream_url,
       })
 
+      // Show "Activating stream" state
+      setIsLoading(false)
+      setIsActivating(true)
+      
+      // Give Go2RTC time to activate the stream (hot-reload)
+      // This prevents the UI from showing a broken stream immediately
+      await new Promise(resolve => setTimeout(resolve, 2500))
+
       // Reset form
       setFormData({
         name: '',
@@ -108,9 +119,11 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
       
       // Refresh camera list and close
       await onSuccess()
+      setIsActivating(false)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear la cámara')
+      setIsActivating(false)
     } finally {
       setIsLoading(false)
     }
@@ -439,13 +452,26 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
               </div>
             )}
 
+            {/* Stream Activation Overlay */}
+            {isActivating && (
+              <div className="mt-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                <div>
+                  <p className="text-sm font-medium text-blue-500">Activando stream...</p>
+                  <p className="text-xs text-muted-foreground">El video estará disponible en unos segundos</p>
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading || isActivating}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading || isActivating}>
                 {isLoading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Agregando...</>
+                ) : isActivating ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Activando...</>
                 ) : (
                   <><Camera className="w-4 h-4 mr-2" />Agregar Cámara</>
                 )}

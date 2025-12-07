@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   HardDrive,
   RefreshCw,
@@ -11,7 +11,10 @@ import {
   Trash2,
   Filter,
   Camera,
-  Zap
+  Zap,
+  Download,
+  AlertTriangle,
+  ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -61,6 +64,10 @@ export function RecordingsView() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  
+  // Video playback state
+  const [videoError, setVideoError] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Load data
   useEffect(() => {
@@ -411,8 +418,14 @@ export function RecordingsView() {
         </Card>
 
       {/* Video Player Dialog */}
-      <Dialog open={!!selectedRecording} onOpenChange={() => setSelectedRecording(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+      <Dialog 
+        open={!!selectedRecording} 
+        onOpenChange={() => {
+          setSelectedRecording(null)
+          setVideoError(false)
+        }}
+      >
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-card">
           <DialogHeader className="p-4 pb-2">
             <DialogTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -422,39 +435,100 @@ export function RecordingsView() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSelectedRecording(null)}
+                onClick={() => {
+                  setSelectedRecording(null)
+                  setVideoError(false)
+                }}
               >
                 <X className="w-4 h-4" />
               </Button>
             </DialogTitle>
           </DialogHeader>
-          <div className="bg-black aspect-video flex items-center justify-center flex-col gap-4 p-8">
+          
+          {/* Video Player */}
+          <div className="bg-black aspect-video relative">
             {selectedRecording && (
-              <>
-                <Film className="w-16 h-16 text-muted-foreground" />
-                <p className="text-muted-foreground text-center">
-                  Para reproducir grabaciones, usa la interfaz de Frigate
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={() => window.open('http://localhost:5000', '_blank')}
-                  >
-                    <Play className="w-4 h-4 mr-2" />
-                    Abrir en Frigate
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open(`/api/recordings/play/${selectedRecording.path}`, '_blank')}
-                  >
-                    Descargar MP4
-                  </Button>
+              <video
+                ref={videoRef}
+                controls
+                autoPlay
+                className="w-full h-full"
+                src={`/api/recordings/play/${selectedRecording.path}`}
+                onError={() => setVideoError(true)}
+                onLoadStart={() => setVideoError(false)}
+              >
+                Tu navegador no soporta la reproducción de video.
+              </video>
+            )}
+            
+            {/* Error Overlay */}
+            {videoError && (
+              <div className="absolute inset-0 bg-black/90 flex items-center justify-center">
+                <div className="text-center p-6">
+                  <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+                  <p className="text-foreground font-medium mb-2">No se pudo reproducir el video</p>
+                  <p className="text-sm text-muted-foreground mb-4 max-w-sm">
+                    Es posible que el formato original de la cámara no sea compatible con tu navegador (codec mp4v).
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        const link = document.createElement('a')
+                        link.href = `/api/recordings/play/${selectedRecording?.path}`
+                        link.download = selectedRecording?.name || 'video.mp4'
+                        link.click()
+                      }}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Descargar Video
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open('http://localhost:5000', '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Abrir Frigate
+                    </Button>
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
-          <div className="p-4 pt-2 flex items-center justify-between text-sm text-muted-foreground border-t">
-            <span>Archivo: {selectedRecording?.name}</span>
-            <span>{selectedRecording?.size_mb} MB</span>
+          
+          {/* Footer with info and actions */}
+          <div className="p-4 pt-2 flex items-center justify-between border-t">
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <Camera className="w-3.5 h-3.5" />
+                {selectedRecording?.camera}
+              </span>
+              <span>{selectedRecording?.size_mb} MB</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const link = document.createElement('a')
+                  link.href = `/api/recordings/play/${selectedRecording?.path}`
+                  link.download = selectedRecording?.name || 'video.mp4'
+                  link.click()
+                }}
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Descargar
+              </Button>
+              <a 
+                href="http://localhost:5000" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Ver en Frigate
+              </a>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -2,7 +2,7 @@
 # Auto-generated - DO NOT EDIT MANUALLY
 # Changes will be overwritten when cameras are modified
 
-version: 0.16-0
+version: '0.14'
 mqtt:
   enabled: true
   host: mqtt
@@ -39,10 +39,10 @@ detect:
   enabled: true
 objects:
   track:
-    - person
-    - car
-    - dog
-    - cat
+  - person
+  - car
+  - dog
+  - cat
   filters:
     person:
       min_score: 0.5
