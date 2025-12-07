@@ -67,35 +67,36 @@ class StreamManager:
             return url
         
         # HTTP streams (MJPEG/JPEG) need ffmpeg transcoding
-        # Use COMPATIBILITY MODE: minimal flags, no audio, robust settings
+        # Use MAXIMUM STABILITY MODE for IP Webcam and similar sources
         if url.startswith(('http://', 'https://')):
-            logger.warning(f"Using COMPATIBILITY MODE for HTTP stream: {stream_name}")
+            logger.warning(f"Using STABILITY MODE for HTTP stream: {stream_name}")
             logger.info(f"HTTP source: {url}")
             
-            # ROBUST FFmpeg command for unstable sources:
-            # -re: Read input at native frame rate (prevents overwhelming)
-            # -an: Disable audio (often broken in cheap cameras/IP Webcam)
+            # STABILITY-FIRST FFmpeg command:
+            # -re: Read at native speed (CRITICAL - prevents ffmpeg from reading too fast)
+            # -an: Disable audio (cause #1 of failures in cheap cameras/IP Webcam)
+            # -r 15: Force 15 fps output (stabilizes irregular input framerate)
             # -c:v libx264: Software encoder (always works)
-            # -preset ultrafast: Minimum CPU, maximum compatibility
-            # -pix_fmt yuv420p: Force standard pixel format
-            # -f mpegts: MPEG-TS container (handles missing timestamps)
+            # -preset ultrafast: Minimum CPU usage
+            # -pix_fmt yuv420p: Standard pixel format for compatibility
+            # -f mpegts: MPEG-TS container (tolerant of timestamp issues)
             #
-            # REMOVED problematic flags:
+            # INTENTIONALLY OMITTED (cause instability with HTTP sources):
             # - NO -tune zerolatency (requires consistent timestamps)
-            # - NO -g (keyframe interval - can fail with variable fps)
-            # - NO -crf (constant quality - can stall with bad input)
-            # - NO -maxrate/-bufsize (rate control - fails with irregular input)
+            # - NO -g (keyframe interval - fails with variable fps)
+            # - NO -crf/-maxrate/-bufsize (rate control - stalls with irregular input)
             ffmpeg_cmd = (
                 f"exec:ffmpeg -hide_banner -loglevel warning "
                 f"-re "
                 f"-i {url} "
-                f"-an "
                 f"-c:v libx264 "
                 f"-preset ultrafast "
+                f"-r 15 "
+                f"-an "
                 f"-pix_fmt yuv420p "
                 f"-f mpegts -"
             )
-            logger.info(f"FFmpeg command: {ffmpeg_cmd}")
+            logger.info(f"FFmpeg command (stability mode): {ffmpeg_cmd}")
             return ffmpeg_cmd
         
         # Unknown format, return as-is and let Go2RTC handle it

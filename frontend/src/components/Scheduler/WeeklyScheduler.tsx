@@ -259,47 +259,54 @@ export function WeeklyScheduler({ cameraId, cameraName, onSaved }: WeeklySchedul
         })}
       </div>
 
-      {/* Schedule Grid */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[700px]">
-          {/* Hour headers */}
-          <div className="flex">
-            <div className="w-12 flex-shrink-0" /> {/* Day label spacer */}
-            {HOURS.map(hour => (
-              <div 
-                key={hour} 
-                className="flex-1 text-center text-[10px] text-zinc-500 pb-1"
-              >
-                {hour.toString().padStart(2, '0')}
+      {/* Schedule Grid - Scrollable container */}
+      <div className="relative">
+        {/* Scroll hint */}
+        <p className="text-[10px] text-zinc-500 mb-2 flex items-center gap-1">
+          <span>↔</span> Desliza horizontalmente para ver las 24 horas
+        </p>
+        
+        <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-800/50">
+          <div className="min-w-[800px]">
+            {/* Hour headers */}
+            <div className="flex">
+              <div className="w-14 flex-shrink-0" /> {/* Day label spacer */}
+              {HOURS.map(hour => (
+                <div 
+                  key={hour} 
+                  className="min-w-[2rem] flex-1 text-center text-[10px] text-zinc-500 pb-1 font-mono"
+                >
+                  {hour.toString().padStart(2, '0')}
+                </div>
+              ))}
+            </div>
+
+            {/* Grid rows */}
+            {DAYS.map((day) => (
+              <div key={day.value} className="flex items-center mb-px">
+                {/* Day label */}
+                <div className="w-14 flex-shrink-0 text-xs font-medium text-zinc-400 pr-2">
+                  {day.label}
+                </div>
+                
+                {/* Hour cells */}
+                <div className="flex flex-1 gap-px">
+                  {HOURS.map(hour => {
+                    const mode = grid[day.value][hour]
+                    return (
+                      <div
+                        key={hour}
+                        className={`min-w-[2rem] flex-1 h-7 cursor-pointer transition-colors rounded-sm ${getCellColor(mode)} hover:opacity-80 hover:ring-1 hover:ring-white/20`}
+                        onMouseDown={() => handleMouseDown(day.value, hour)}
+                        onMouseEnter={() => handleMouseEnter(day.value, hour)}
+                        title={`${day.fullLabel} ${hour}:00 - ${mode || 'Sin configurar'}`}
+                      />
+                    )
+                  })}
+                </div>
               </div>
             ))}
           </div>
-
-          {/* Grid rows */}
-          {DAYS.map((day) => (
-            <div key={day.value} className="flex items-center">
-              {/* Day label */}
-              <div className="w-12 flex-shrink-0 text-xs font-medium text-zinc-400 pr-2">
-                {day.label}
-              </div>
-              
-              {/* Hour cells */}
-              <div className="flex flex-1 gap-px">
-                {HOURS.map(hour => {
-                  const mode = grid[day.value][hour]
-                  return (
-                    <div
-                      key={hour}
-                      className={`flex-1 h-6 cursor-pointer transition-colors rounded-sm ${getCellColor(mode)} hover:opacity-80`}
-                      onMouseDown={() => handleMouseDown(day.value, hour)}
-                      onMouseEnter={() => handleMouseEnter(day.value, hour)}
-                      title={`${day.fullLabel} ${hour}:00 - ${mode || 'Sin configurar'}`}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
