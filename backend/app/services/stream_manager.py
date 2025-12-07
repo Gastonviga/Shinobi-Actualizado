@@ -40,19 +40,19 @@ class StreamManager:
         """
         return name.lower().replace(" ", "_").replace("-", "_")
     
-    def _convert_url_for_go2rtc(self, url: str) -> str:
+    def _convert_url_for_go2rtc(self, url: str, stream_name: str = "unknown") -> str:
         """
-        Convert a stream URL to Go2RTC compatible format with optimized encoding.
+        Convert a stream URL to Go2RTC compatible format.
         
-        Strategy:
+        Strategy (prioritizing compatibility over quality):
         - RTSP H264/H265: Passthrough (copy) - zero CPU usage
-        - HTTP/MJPEG: Transcode with hardware acceleration or efficient preset
+        - HTTP/MJPEG: ROBUST FFmpeg command that works with unstable sources
         - Already prefixed URLs: Left as-is
         
-        Hardware acceleration priority:
-        1. NVIDIA NVENC (h264_nvenc) - if GPU available
-        2. Intel QSV (h264_qsv) - integrated graphics
-        3. Software libx264 with superfast preset - fallback
+        For HTTP streams (IP Webcam, cheap cameras):
+        - Minimal flags to maximize compatibility
+        - Audio disabled (-an) to avoid codec issues
+        - No timestamp-dependent flags that break with irregular sources
         """
         url = url.strip()
         
@@ -67,62 +67,104 @@ class StreamManager:
             return url
         
         # HTTP streams (MJPEG/JPEG) need ffmpeg transcoding
+        # Use COMPATIBILITY MODE: minimal flags, no audio, robust settings
         if url.startswith(('http://', 'https://')):
-            logger.info(f"HTTP stream detected - using optimized ffmpeg transcoding")
+            logger.warning(f"Using COMPATIBILITY MODE for HTTP stream: {stream_name}")
+            logger.info(f"HTTP source: {url}")
             
-            # Build optimized FFmpeg command:
-            # - Try hardware encoding first (NVENC), fallback to libx264
-            # - superfast preset (better than ultrafast quality, still fast)
-            # - zerolatency tune for live streaming
-            # - Reduced bitrate for sub-streams
+            # ROBUST FFmpeg command for unstable sources:
+            # -re: Read input at native frame rate (prevents overwhelming)
+            # -an: Disable audio (often broken in cheap cameras/IP Webcam)
+            # -c:v libx264: Software encoder (always works)
+            # -preset ultrafast: Minimum CPU, maximum compatibility
+            # -pix_fmt yuv420p: Force standard pixel format
+            # -f mpegts: MPEG-TS container (handles missing timestamps)
+            #
+            # REMOVED problematic flags:
+            # - NO -tune zerolatency (requires consistent timestamps)
+            # - NO -g (keyframe interval - can fail with variable fps)
+            # - NO -crf (constant quality - can stall with bad input)
+            # - NO -maxrate/-bufsize (rate control - fails with irregular input)
             ffmpeg_cmd = (
-                f"exec:ffmpeg -hide_banner -loglevel error "
+                f"exec:ffmpeg -hide_banner -loglevel warning "
+                f"-re "
                 f"-i {url} "
-                f"-c:v libx264 "        # Software encoder (most compatible)
-                f"-preset superfast "    # Good balance of speed/quality (not ultrafast)
-                f"-tune zerolatency "    # Optimized for live streaming
-                f"-crf 23 "              # Constant quality (lower = better, 23 is default)
-                f"-maxrate 2M "          # Cap bitrate for network efficiency
-                f"-bufsize 4M "          # Buffer size
-                f"-g 30 "                # Keyframe interval (1 second at 30fps)
-                f"-f mpegts -"           # Output format
+                f"-an "
+                f"-c:v libx264 "
+                f"-preset ultrafast "
+                f"-pix_fmt yuv420p "
+                f"-f mpegts -"
             )
+            logger.info(f"FFmpeg command: {ffmpeg_cmd}")
             return ffmpeg_cmd
         
         # Unknown format, return as-is and let Go2RTC handle it
+        logger.warning(f"Unknown stream format, passing as-is: {url}")
         return url
     
-    def _get_optimized_ffmpeg_cmd(self, url: str, quality: str = "main") -> str:
+    def _get_optimized_ffmpeg_cmd(self, url: str, quality: str = "main", stream_name: str = "unknown") -> str:
         """
-        Generate optimized FFmpeg command based on stream quality tier.
+        Generate FFmpeg command based on stream quality tier.
+        
+        COMPATIBILITY FIRST approach:
+        - Prioritize "it works" over "it's perfect"
+        - Minimal flags for unstable HTTP sources
+        - No audio (common source of failures)
         
         Args:
             url: Source stream URL
             quality: "main" for high quality, "sub" for lower quality grid view
+            stream_name: Name for logging
             
         Returns:
-            FFmpeg command string optimized for the use case
+            FFmpeg command string optimized for compatibility
         """
-        if quality == "sub":
-            # Sub-stream: Lower resolution for grid view, minimal CPU
-            return (
-                f"exec:ffmpeg -hide_banner -loglevel error "
-                f"-i {url} "
-                f"-c:v libx264 -preset ultrafast -tune zerolatency "
-                f"-vf scale=640:-2 "     # Scale down for grid view
-                f"-crf 28 "              # Lower quality is fine for thumbnails
-                f"-maxrate 500k -bufsize 1M "
-                f"-g 30 -f mpegts -"
-            )
+        is_http = url.startswith(('http://', 'https://'))
+        
+        if is_http:
+            # HTTP sources (MJPEG/IP Webcam) - COMPATIBILITY MODE
+            logger.warning(f"Compatibility mode FFmpeg for {stream_name} ({quality})")
+            
+            if quality == "sub":
+                # Sub-stream: Scale down for grid view
+                return (
+                    f"exec:ffmpeg -hide_banner -loglevel warning "
+                    f"-re -i {url} "
+                    f"-an "
+                    f"-c:v libx264 -preset ultrafast "
+                    f"-vf scale=640:-2 "
+                    f"-pix_fmt yuv420p "
+                    f"-f mpegts -"
+                )
+            else:
+                # Main stream: Full resolution
+                return (
+                    f"exec:ffmpeg -hide_banner -loglevel warning "
+                    f"-re -i {url} "
+                    f"-an "
+                    f"-c:v libx264 -preset ultrafast "
+                    f"-pix_fmt yuv420p "
+                    f"-f mpegts -"
+                )
         else:
-            # Main stream: Full quality for recording/detail view
-            return (
-                f"exec:ffmpeg -hide_banner -loglevel error "
-                f"-i {url} "
-                f"-c:v libx264 -preset superfast -tune zerolatency "
-                f"-crf 23 -maxrate 4M -bufsize 8M "
-                f"-g 30 -f mpegts -"
-            )
+            # RTSP sources - can use more optimizations
+            if quality == "sub":
+                return (
+                    f"exec:ffmpeg -hide_banner -loglevel error "
+                    f"-i {url} "
+                    f"-c:v libx264 -preset ultrafast "
+                    f"-vf scale=640:-2 "
+                    f"-an -pix_fmt yuv420p "
+                    f"-f mpegts -"
+                )
+            else:
+                return (
+                    f"exec:ffmpeg -hide_banner -loglevel error "
+                    f"-i {url} "
+                    f"-c:v libx264 -preset superfast "
+                    f"-an -pix_fmt yuv420p "
+                    f"-f mpegts -"
+                )
     
     async def _get_config(self) -> Dict[str, Any]:
         """Get current Go2RTC configuration as dict."""
@@ -274,9 +316,9 @@ class StreamManager:
         sub_stream_id = f"{normalized_name}_sub"
         sub_url = sub_stream_url or main_stream_url
         
-        # Convert URLs to Go2RTC compatible format
-        main_go2rtc_url = self._convert_url_for_go2rtc(main_stream_url)
-        sub_go2rtc_url = self._convert_url_for_go2rtc(sub_url)
+        # Convert URLs to Go2RTC compatible format (pass stream name for logging)
+        main_go2rtc_url = self._convert_url_for_go2rtc(main_stream_url, main_stream_id)
+        sub_go2rtc_url = self._convert_url_for_go2rtc(sub_url, sub_stream_id)
         
         logger.info(f"Registering streams for camera: {name} -> {normalized_name}")
         logger.info(f"Main stream: {main_stream_id} = {main_go2rtc_url}")

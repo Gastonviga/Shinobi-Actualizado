@@ -70,18 +70,15 @@ streams:
     camara_31_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     camara_32_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     camara_32_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
+    # IP Webcam (Android) - Usar /video endpoint para MJPEG
+    celular_prueba_main: exec:ffmpeg -hide_banner -loglevel warning -re -i http://192.168.1.6:8080/video -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p -f mpegts -
+    celular_prueba_sub: exec:ffmpeg -hide_banner -loglevel warning -re -i http://192.168.1.6:8080/video -an -c:v libx264 -preset ultrafast -vf scale=640:-2 -pix_fmt yuv420p -f mpegts -
     estacionamiento_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     estacionamiento_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     pasillo_norte_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     pasillo_norte_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     pasillo_sur_main: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
     pasillo_sur_sub: exec:ffmpeg -re -f lavfi -i testsrc=size=640x480:rate=5 -c:v libx264 -preset ultrafast -tune zerolatency -f mpegts -
-    probe_temp_5070ba1a: http://192.168.1.7:8080
-    probe_temp_5538207c: http://192.168.1.7:8080/video
-    probe_temp_8197556c: http://192.168.1.7:8080
-    probe_temp_a5bba0ab: http://192.168.1.7:8080
-    probe_temp_ae921334: http://192.168.1.7:8080
-    probe_temp_da855ffc: http://192.168.1.7:8080/video
 webrtc:
     candidates:
         - stun:stun.l.google.com:19302

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { VideoOff, Volume2, VolumeX, Maximize2, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { VideoOff, Volume2, VolumeX, Maximize2, RefreshCw, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GO2RTC_URL } from '@/lib/api'
 
@@ -31,12 +31,16 @@ export function CameraPlayer({
   onFullscreen,
 }: CameraPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const mjpegRetryCountRef = useRef(0) // Track retries without causing re-renders
+  
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [useMjpeg, setUseMjpeg] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const [mjpegKey, setMjpegKey] = useState(0) // Key to force MJPEG img reconnection
+  const [isRetrying, setIsRetrying] = useState(false) // Backoff state to prevent infinite loops
 
   // Build stream ID
   const streamId = `${normalizeName(cameraName)}_${quality}`
@@ -64,51 +68,101 @@ export function CameraPlayer({
     console.log(`[CameraPlayer] Stream playing: ${streamId}`)
   }
 
-  const handleError = () => {
-    console.error(`[CameraPlayer] Stream error: ${streamId}, useMjpeg: ${useMjpeg}`)
+  const handleError = useCallback(() => {
+    // CRITICAL: Prevent infinite loops - if already retrying, do nothing
+    if (isRetrying) {
+      console.log(`[CameraPlayer] Already retrying, ignoring error event`);
+      return;
+    }
+    
+    console.error(`[CameraPlayer] Stream error: ${streamId}, useMjpeg: ${useMjpeg}`);
     
     // Try MJPEG fallback if MP4 fails
     if (!useMjpeg) {
-      console.log(`[CameraPlayer] Falling back to MJPEG`)
-      setUseMjpeg(true)
-      setIsLoading(true)
+      console.log(`[CameraPlayer] Falling back to MJPEG`);
+      mjpegRetryCountRef.current = 0; // Reset MJPEG retry counter
+      setUseMjpeg(true);
+      setIsLoading(true);
     } else {
-      // MJPEG also failed - increment key to force img reconnection
-      // This forces browser to create new connection instead of using cached broken state
-      setMjpegKey(prev => prev + 1)
-      console.log(`[CameraPlayer] MJPEG error, forcing reconnect with new key`)
+      // MJPEG also failed - need backoff strategy
+      mjpegRetryCountRef.current += 1;
+      const currentRetry = mjpegRetryCountRef.current;
       
-      // After 3 MJPEG retries, show error
-      if (mjpegKey >= 2) {
-        setIsLoading(false)
-        setHasError(true)
-      } else {
-        // Give it a moment before retry
-        setTimeout(() => {
-          setIsLoading(true)
-        }, 1000)
+      console.log(`[CameraPlayer] MJPEG error #${currentRetry}, max 3`);
+      
+      // After 3 MJPEG retries, show permanent error
+      if (currentRetry >= 3) {
+        console.log(`[CameraPlayer] Max retries reached, showing error state`);
+        setIsLoading(false);
+        setIsRetrying(false);
+        setHasError(true);
+        return;
       }
+      
+      // Set retrying state to show overlay and block further error handling
+      setIsRetrying(true);
+      setIsLoading(false); // Hide loading spinner, show retry overlay instead
+      
+      // Clear any existing timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      
+      // Wait 3 seconds before retrying (backoff)
+      console.log(`[CameraPlayer] Waiting 3s before retry...`);
+      retryTimeoutRef.current = setTimeout(() => {
+        console.log(`[CameraPlayer] Retrying MJPEG connection...`);
+        setMjpegKey(prev => prev + 1); // Force new connection
+        setIsRetrying(false);
+        setIsLoading(true);
+      }, 3000);
     }
-  }
+  }, [isRetrying, useMjpeg, streamId]);
 
-  const handleRetry = () => {
-    setRetryCount(prev => prev + 1)
-    setUseMjpeg(false)
-    setMjpegKey(0) // Reset MJPEG retry counter
-    setHasError(false)
-    setIsLoading(true)
-  }
+  const handleRetry = useCallback(() => {
+    // Clear any pending retry timeout
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    
+    // Reset all state for fresh start
+    mjpegRetryCountRef.current = 0;
+    setRetryCount(prev => prev + 1);
+    setUseMjpeg(false);
+    setMjpegKey(0);
+    setHasError(false);
+    setIsRetrying(false);
+    setIsLoading(true);
+  }, []);
 
   // Reset when camera or quality changes
   useEffect(() => {
-    setIsLoading(true)
-    setHasError(false)
-    setUseMjpeg(false)
+    // Clear any pending retry timeout on camera change
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    
+    mjpegRetryCountRef.current = 0;
+    setIsLoading(true);
+    setHasError(false);
+    setUseMjpeg(false);
+    setIsRetrying(false);
     
     if (videoRef.current) {
-      videoRef.current.load()
+      videoRef.current.load();
     }
-  }, [cameraName, quality, retryCount])
+  }, [cameraName, quality, retryCount]);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Update muted state
   useEffect(() => {
@@ -129,8 +183,19 @@ export function CameraPlayer({
         </div>
       )}
 
+      {/* Retrying Overlay - Shows during 3s backoff */}
+      {isRetrying && (
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/90 z-20">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+            <span className="text-sm text-zinc-300 font-medium">Reconectando cámara...</span>
+            <span className="text-xs text-zinc-500">Intento {mjpegRetryCountRef.current}/3</span>
+          </div>
+        </div>
+      )}
+
       {/* Error Overlay */}
-      {hasError && (
+      {hasError && !isRetrying && (
         <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
           <div className="flex flex-col items-center gap-3 text-white/70">
             <VideoOff className="w-12 h-12" />
