@@ -8,26 +8,25 @@ import {
   LogOut,
   Settings,
   Loader2,
-  Shield,
-  UserCog,
-  Eye,
   Map,
   Search,
   PlaySquare,
-  MonitorPlay
+  MonitorPlay,
+  ServerCog
 } from 'lucide-react'
 import { ModeToggle } from '@/components/mode-toggle'
 import { Button } from '@/components/ui/button'
 import { SmartCameraCard } from '@/components/SmartCameraCard'
 import { AddCameraDialog } from '@/components/AddCameraDialog'
 import { EditCameraDialog } from '@/components/EditCameraDialog'
-import { SettingsDialog } from '@/components/SettingsDialog'
 import { RecordingsView } from '@/components/RecordingsView'
 
-// Lazy load heavy views for faster initial navigation
+// Lazy load heavy views and dialogs for faster initial load
 const MapsView = lazy(() => import('@/components/MapsView').then(m => ({ default: m.MapsView })))
 const SmartSearch = lazy(() => import('@/components/SmartSearch/SmartSearch').then(m => ({ default: m.SmartSearch })))
 const IncidentWorkspace = lazy(() => import('@/components/SyncPlayback/IncidentWorkspace').then(m => ({ default: m.IncidentWorkspace })))
+const SettingsDialog = lazy(() => import('@/components/SettingsDialog').then(m => ({ default: m.SettingsDialog })))
+const AdminDialog = lazy(() => import('@/components/AdminDialog').then(m => ({ default: m.AdminDialog })))
 import { LoginPage } from '@/components/LoginPage'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { 
@@ -63,6 +62,7 @@ function Dashboard() {
   const [camerasLoading, setCamerasLoading] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
+  const [showAdminDialog, setShowAdminDialog] = useState(false)
   const [editingCamera, setEditingCamera] = useState<CameraType | null>(null)
   const [cameraStatuses, setCameraStatuses] = useState<Record<number, CameraStatus>>({})
   const [activeView, setActiveView] = useState<'cameras' | 'recordings' | 'maps' | 'search' | 'playback'>('cameras')
@@ -273,13 +273,22 @@ function Dashboard() {
           <div className="flex items-center gap-1">
             {/* Settings - Only for admin */}
             {isAdmin && (
-              <button
-                onClick={() => setShowSettingsDialog(true)}
-                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                title="Configuración"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
+              <>
+                <button
+                  onClick={() => setShowSettingsDialog(true)}
+                  className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  title="Configuración"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setShowAdminDialog(true)}
+                  className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  title="Sistema (Email, Nube, Backups)"
+                >
+                  <ServerCog className="h-4 w-4" />
+                </button>
+              </>
             )}
             
             {/* Kiosk Mode */}
@@ -353,22 +362,24 @@ function Dashboard() {
 
             {/* Selection Actions Bar */}
             {isSelectionMode && selectedCameras.size > 0 && (
-              <div className="flex items-center justify-between mb-3 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+              <div className="flex items-center justify-between mb-3 p-3 bg-destructive/10 rounded-lg border border-destructive/30">
                 <div className="flex items-center gap-3">
                   <CheckSquare className="h-5 w-5 text-destructive" />
                   <span className="text-sm font-medium text-foreground">
                     {selectedCameras.size} cámara{selectedCameras.size !== 1 ? 's' : ''} seleccionada{selectedCameras.size !== 1 ? 's' : ''}
                   </span>
-                  <button
+                  <Button
+                    variant="link"
+                    size="sm"
                     onClick={selectAllCameras}
-                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                    className="text-xs p-0 h-auto"
                   >
                     Seleccionar todas ({paginatedCameras.length})
-                  </button>
+                  </Button>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
                     onClick={toggleSelectionMode}
                   >
@@ -380,8 +391,8 @@ function Dashboard() {
                     size="sm"
                     onClick={() => setShowBulkDeleteConfirm(true)}
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Eliminar Selección
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Eliminar ({selectedCameras.size})
                   </Button>
                 </div>
               </div>
@@ -474,6 +485,19 @@ function Dashboard() {
                   {cameras.length} cámaras
                   {cameraViewMode === 'list' && selectedGroup && ` • "${selectedGroup}"`}
                 </span>
+                
+                {/* Add Camera Button - Always visible */}
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowAddDialog(true)}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    <span className="hidden sm:inline">Agregar Cámara</span>
+                    <span className="sm:hidden">Agregar</span>
+                  </Button>
+                )}
               </div>
             )}
 
@@ -560,10 +584,23 @@ function Dashboard() {
         onSuccess={loadCameras}
       />
       
-      <SettingsDialog
-        isOpen={showSettingsDialog}
-        onClose={() => setShowSettingsDialog(false)}
-      />
+      {showSettingsDialog && (
+        <Suspense fallback={null}>
+          <SettingsDialog
+            isOpen={showSettingsDialog}
+            onClose={() => setShowSettingsDialog(false)}
+          />
+        </Suspense>
+      )}
+      
+      {showAdminDialog && (
+        <Suspense fallback={null}>
+          <AdminDialog
+            isOpen={showAdminDialog}
+            onClose={() => setShowAdminDialog(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Bulk Delete Cameras Confirmation Modal */}
       {showBulkDeleteConfirm && (
@@ -657,7 +694,12 @@ function ProtectedRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <AuthProvider>
         <ProtectedRoutes />
       </AuthProvider>

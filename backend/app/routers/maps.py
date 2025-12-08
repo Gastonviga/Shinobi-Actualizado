@@ -37,9 +37,24 @@ router = APIRouter(prefix="/maps", tags=["maps"])
 # Alert threshold - cameras with events in last N seconds show alert
 ALERT_THRESHOLD_SECONDS = 30
 
-# Storage path for map images
-MAPS_STORAGE_PATH = os.path.join(settings.storage_path, "maps")
-os.makedirs(MAPS_STORAGE_PATH, exist_ok=True)
+# Storage path for map images - use absolute path
+def get_maps_storage_path():
+    """Get the absolute path for maps storage."""
+    base_path = settings.storage_path
+    
+    # If relative path, make it relative to PROJECT root (TitanNVR folder, not backend)
+    if not os.path.isabs(base_path):
+        # Go from app/routers/maps.py -> backend/ -> TitanNVR/
+        backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        project_root = os.path.dirname(backend_root)  # Go up one more level to TitanNVR
+        base_path = os.path.join(project_root, "storage")
+    
+    maps_path = os.path.join(base_path, "maps")
+    os.makedirs(maps_path, exist_ok=True)
+    return maps_path
+
+MAPS_STORAGE_PATH = get_maps_storage_path()
+logger.info(f"Maps storage path: {MAPS_STORAGE_PATH}")
 
 # Allowed image extensions
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
@@ -49,6 +64,40 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 def get_image_url(image_path: str) -> str:
     """Convert storage path to accessible URL."""
     return f"/api/maps/images/{os.path.basename(image_path)}"
+
+
+# ============================================================
+# Image serving endpoint - MUST be before /{map_id} route
+# ============================================================
+@router.get("/images/{filename}")
+async def get_map_image(filename: str):
+    """Serve map image files."""
+    file_path = os.path.join(MAPS_STORAGE_PATH, filename)
+    
+    logger.debug(f"Serving map image: {file_path}")
+    
+    if not os.path.exists(file_path):
+        logger.warning(f"Map image not found: {file_path}")
+        logger.warning(f"Storage path: {MAPS_STORAGE_PATH}")
+        logger.warning(f"Files in storage: {os.listdir(MAPS_STORAGE_PATH) if os.path.exists(MAPS_STORAGE_PATH) else 'DIR NOT FOUND'}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image not found: {filename}"
+        )
+    
+    # Determine media type from extension
+    ext = os.path.splitext(filename)[1].lower()
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml"
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+    
+    return FileResponse(file_path, media_type=media_type)
 
 
 @router.get("/", response_model=List[MapResponse])
@@ -278,20 +327,6 @@ async def delete_map(
     
     # Delete database record
     await db.delete(map_obj)
-
-
-@router.get("/images/{filename}")
-async def get_map_image(filename: str):
-    """Serve map image files."""
-    file_path = os.path.join(MAPS_STORAGE_PATH, filename)
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image not found"
-        )
-    
-    return FileResponse(file_path)
 
 
 # ============================================================

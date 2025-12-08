@@ -153,6 +153,34 @@ async def get_current_user_info(
     )
 
 
+@router.post("/logout")
+async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Logout endpoint - logs the logout action for audit purposes.
+    
+    Note: JWT tokens are stateless, so the actual token invalidation
+    should be handled client-side by removing the token from storage.
+    This endpoint just records the logout event for compliance/auditing.
+    """
+    # Log the logout action
+    await log_action(
+        db=db,
+        user=current_user,
+        action=AuditAction.LOGOUT,
+        details=f"User '{current_user.username}' logged out",
+        request=request
+    )
+    await db.commit()
+    
+    logger.info(f"User '{current_user.username}' logged out")
+    
+    return {"message": "Logged out successfully"}
+
+
 @router.post("/change-password")
 async def change_password(
     password_data: PasswordChange,
