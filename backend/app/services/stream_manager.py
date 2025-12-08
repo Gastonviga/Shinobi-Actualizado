@@ -72,7 +72,7 @@ class StreamManager:
             logger.warning(f"Using LOW LATENCY MODE for HTTP stream: {stream_name}")
             logger.info(f"HTTP source: {url}")
             
-            # LOW LATENCY FFmpeg command:
+            # MODO REAL-TIME (Sin buffer, descarta frames viejos)
             # -fflags nobuffer: Disable input buffering
             # -flags low_delay: Minimize codec latency
             # -use_wallclock_as_timestamps 1: Key for IP Webcam (uses system time)
@@ -80,7 +80,6 @@ class StreamManager:
             # -r 15: Force 15 fps output (stabilizes irregular framerate)
             # -tune zerolatency: Optimize encoder for streaming
             # -g 30: Keyframe every 2s for fast recovery
-            # -f mpegts: MPEG-TS container (tolerant of timestamp issues)
             #
             # REMOVED: -re (causes latency buildup with live sources)
             ffmpeg_cmd = (
@@ -93,8 +92,7 @@ class StreamManager:
                 f"-r 15 "
                 f"-an "
                 f"-g 30 "
-                f"-pix_fmt yuv420p "
-                f"-f mpegts -"
+                f"-f rtsp {{rtsp_server}}/{{name}}"
             )
             logger.info(f"FFmpeg command (low latency): {ffmpeg_cmd}")
             return ffmpeg_cmd

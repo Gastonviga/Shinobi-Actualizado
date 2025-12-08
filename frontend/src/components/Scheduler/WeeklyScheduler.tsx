@@ -266,7 +266,7 @@ export function WeeklyScheduler({ cameraId, cameraName, onSaved }: WeeklySchedul
           <span>↔</span> Desliza horizontalmente para ver las 24 horas
         </p>
         
-        <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-800/50">
+        <div className="w-full max-w-[calc(100vw-4rem)] sm:max-w-full overflow-x-auto border border-border rounded-md pb-2">
           <div className="min-w-[800px]">
             {/* Hour headers */}
             <div className="flex">
