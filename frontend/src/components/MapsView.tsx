@@ -74,14 +74,29 @@ export function MapsView() {
   const [creating, setCreating] = useState(false)
 
   // Load maps
-  const loadMaps = useCallback(async () => {
+  const loadMaps = useCallback(async (selectFirst: boolean = false) => {
     setLoading(true)
     try {
       const data = await getMaps()
       setMaps(data)
-      if (data.length > 0 && !selectedMap) {
-        const mapDetails = await getMap(data[0].id)
-        setSelectedMap(mapDetails)
+      
+      // If selectFirst is true OR no map is selected, select the first available
+      if (selectFirst || !selectedMap) {
+        if (data.length > 0) {
+          const mapDetails = await getMap(data[0].id)
+          setSelectedMap(mapDetails)
+        } else {
+          setSelectedMap(null)
+        }
+      } else if (selectedMap) {
+        // Verify selected map still exists, otherwise select first
+        const stillExists = data.some(m => m.id === selectedMap.id)
+        if (!stillExists && data.length > 0) {
+          const mapDetails = await getMap(data[0].id)
+          setSelectedMap(mapDetails)
+        } else if (!stillExists) {
+          setSelectedMap(null)
+        }
       }
     } catch (err) {
       console.error('Failed to load maps:', err)
@@ -120,12 +135,27 @@ export function MapsView() {
     
     setCreating(true)
     try {
-      await createMap(newMapName, newMapDescription || null, newMapImage)
+      // Create the map and get the response with the new map data
+      const newMap = await createMap(newMapName, newMapDescription || null, newMapImage)
+      
+      // Close dialog and reset form
       setShowCreateDialog(false)
       setNewMapName('')
       setNewMapDescription('')
       setNewMapImage(null)
-      await loadMaps()
+      
+      // Reload maps list
+      await loadMaps(true)
+      
+      // If we got the new map data, select it
+      if (newMap && newMap.id) {
+        try {
+          const mapDetails = await getMap(newMap.id)
+          setSelectedMap(mapDetails)
+        } catch {
+          // If fetching details fails, the loadMaps already selected the first one
+        }
+      }
     } catch (err) {
       console.error('Failed to create map:', err)
     } finally {
@@ -138,10 +168,17 @@ export function MapsView() {
     if (!selectedMap) return
     
     try {
+      // 1. Delete the map
       await deleteMap(selectedMap.id)
+      
+      // 2. Clear selection IMMEDIATELY
       setSelectedMap(null)
+      
+      // 3. Close confirmation dialog
       setShowDeleteConfirm(false)
-      await loadMaps()
+      
+      // 4. Reload maps and select the first one
+      await loadMaps(true)
     } catch (err) {
       console.error('Failed to delete map:', err)
     }

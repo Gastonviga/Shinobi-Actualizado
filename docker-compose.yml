@@ -34,6 +34,7 @@ services:
       - "8555:8555"   # WebRTC (TCP)
     volumes:
       - ./config:/config  # Writable for dynamic stream config
+      - ./storage:/app/storage
     environment:
       - TZ=America/Argentina/Buenos_Aires
     networks:
@@ -81,6 +82,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8000/api
       - VITE_GO2RTC_URL=http://localhost:1984
+      - VITE_API_PROXY_TARGET=http://backend:8000  # Proxy target for Docker networking
     depends_on:
       - backend
     networks:

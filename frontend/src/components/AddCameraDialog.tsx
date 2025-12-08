@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Camera, Loader2, HardDrive, Upload, FileJson, CheckCircle, AlertCircle, X, Wifi, WifiOff } from 'lucide-react'
+import { Camera, Loader2, HardDrive, Upload, FileJson, CheckCircle, AlertCircle, AlertTriangle, X, Wifi, WifiOff, Trash2, Edit2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,96 @@ interface AddCameraDialogProps {
 }
 
 type TabMode = 'manual' | 'import'
+
+// Interfaz extendida para cámaras importadas con metadatos de mapeo
+interface ImportedCamera extends CameraCreate {
+  _hasWarning?: boolean
+  _warningMessage?: string
+  _detectedFields?: {
+    name?: string
+    main_stream_url?: string
+    sub_stream_url?: string
+    group?: string
+  }
+}
+
+// Función de normalización con Smart Mapping
+function normalizeImportData(rawItem: any, index: number): ImportedCamera {
+  const detectedFields: ImportedCamera['_detectedFields'] = {}
+  
+  // === MAPEO DE NOMBRE ===
+  const nameKeys = ['name', 'alias', 'camera_name', 'label', 'id', 'nombre', 'camara']
+  let name = ''
+  for (const key of nameKeys) {
+    if (rawItem[key] && typeof rawItem[key] === 'string') {
+      name = rawItem[key]
+      detectedFields.name = key
+      break
+    }
+  }
+  if (!name) {
+    name = `Cámara Importada ${index + 1}`
+  }
+
+  // === MAPEO DE STREAM PRINCIPAL ===
+  const urlKeys = ['main_stream_url', 'url', 'stream', 'rtsp_url', 'address', 'ip', 'uri', 'rtsp', 'main_url', 'stream_url']
+  let mainStreamUrl = ''
+  for (const key of urlKeys) {
+    if (rawItem[key] && typeof rawItem[key] === 'string') {
+      let value = rawItem[key].trim()
+      
+      // Detectar si es una IP sin protocolo y convertir a RTSP placeholder
+      const ipRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/
+      if (ipRegex.test(value)) {
+        value = `rtsp://admin:password@${value}:554/stream1`
+      }
+      
+      mainStreamUrl = value
+      detectedFields.main_stream_url = key
+      break
+    }
+  }
+
+  // === MAPEO DE STREAM SECUNDARIO ===
+  const subKeys = ['sub_stream_url', 'sub', 'sd_stream', 'substream', 'sub_url', 'secondary_url', 'stream2']
+  let subStreamUrl = ''
+  for (const key of subKeys) {
+    if (rawItem[key] && typeof rawItem[key] === 'string') {
+      subStreamUrl = rawItem[key].trim()
+      detectedFields.sub_stream_url = key
+      break
+    }
+  }
+
+  // === MAPEO DE GRUPO ===
+  const groupKeys = ['group', 'zone', 'area', 'location', 'grupo', 'zona', 'ubicacion', 'sector']
+  let group = ''
+  for (const key of groupKeys) {
+    if (rawItem[key] && typeof rawItem[key] === 'string') {
+      group = rawItem[key].trim()
+      detectedFields.group = key
+      break
+    }
+  }
+
+  // Determinar si hay advertencia (falta URL)
+  const hasWarning = !mainStreamUrl
+  const warningMessage = hasWarning ? 'URL de stream no detectada' : undefined
+
+  return {
+    name,
+    main_stream_url: mainStreamUrl,
+    sub_stream_url: subStreamUrl || mainStreamUrl,
+    group: group || rawItem.group || '',
+    location: rawItem.location || '',
+    retention_days: rawItem.retention_days || 7,
+    recording_mode: rawItem.recording_mode || 'motion',
+    event_retention_days: rawItem.event_retention_days || 14,
+    _hasWarning: hasWarning,
+    _warningMessage: warningMessage,
+    _detectedFields: detectedFields,
+  }
+}
 
 const RECORDING_MODES = [
   { value: 'motion', label: 'Solo Movimiento', desc: 'Graba cuando detecta movimiento (~2-5 GB/día)', color: 'text-yellow-500' },
@@ -74,8 +164,9 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
   }, [isOpen])
   
   // Import state
-  const [importData, setImportData] = useState<CameraCreate[] | null>(null)
+  const [importData, setImportData] = useState<ImportedCamera[] | null>(null)
   const [importResult, setImportResult] = useState<BulkCreateResponse | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -167,7 +258,7 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
     }
   }
 
-  // Handle JSON file import
+  // Handle JSON file import con Smart Mapping
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -179,15 +270,14 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
         if (!Array.isArray(json)) {
           throw new Error('El archivo debe contener un array de cámaras')
         }
-        // Validate each camera has required fields
-        for (const cam of json) {
-          if (!cam.name || !cam.main_stream_url) {
-            throw new Error('Cada cámara debe tener al menos "name" y "main_stream_url"')
-          }
-        }
-        setImportData(json)
+        
+        // Aplicar Smart Mapping a cada item
+        const normalizedData = json.map((item, index) => normalizeImportData(item, index))
+        
+        setImportData(normalizedData)
         setError(null)
         setImportResult(null)
+        setEditingIndex(null)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al parsear JSON')
         setImportData(null)
@@ -196,15 +286,51 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
     reader.readAsText(file)
   }
 
+  // Actualizar cámara importada
+  const handleUpdateImportedCamera = (index: number, field: keyof CameraCreate, value: string) => {
+    if (!importData) return
+    
+    const updated = [...importData]
+    updated[index] = {
+      ...updated[index],
+      [field]: value,
+      // Si se actualiza la URL, quitar la advertencia
+      ...(field === 'main_stream_url' && value.trim() ? {
+        _hasWarning: false,
+        _warningMessage: undefined
+      } : {})
+    }
+    setImportData(updated)
+  }
+
+  // Eliminar cámara de la importación
+  const handleRemoveImportedCamera = (index: number) => {
+    if (!importData) return
+    const updated = importData.filter((_, i) => i !== index)
+    setImportData(updated.length > 0 ? updated : null)
+    setEditingIndex(null)
+  }
+
   // Handle bulk import
   const handleBulkImport = async () => {
     if (!importData) return
+    
+    // Filtrar solo cámaras válidas (con URL)
+    const validCameras = importData.filter(cam => cam.main_stream_url.trim())
+    
+    if (validCameras.length === 0) {
+      setError('No hay cámaras válidas para importar. Todas requieren una URL de stream.')
+      return
+    }
     
     setIsLoading(true)
     setError(null)
     
     try {
-      const result = await createCamerasBulk(importData)
+      // Limpiar campos internos antes de enviar
+      const cleanedCameras: CameraCreate[] = validCameras.map(({ _hasWarning, _warningMessage, _detectedFields, ...cam }) => cam)
+      
+      const result = await createCamerasBulk(cleanedCameras)
       setImportResult(result)
       
       if (result.created > 0) {
@@ -500,19 +626,126 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
               <p className="text-xs text-muted-foreground mt-1">o arrastra y suelta aquí</p>
             </div>
 
-            {/* Preview */}
+            {/* Preview con Smart Mapping */}
             {importData && !importResult && (
               <div className="p-4 rounded-lg bg-muted/50 space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                  <span className="font-medium">Se importarán {importData.length} cámaras</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm">
+                    {importData.some(c => c._hasWarning) ? (
+                      <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    )}
+                    <span className="font-medium">
+                      {importData.filter(c => !c._hasWarning).length} de {importData.length} cámaras listas
+                    </span>
+                  </div>
+                  {importData.some(c => c._hasWarning) && (
+                    <span className="text-xs text-yellow-500">
+                      {importData.filter(c => c._hasWarning).length} requieren atención
+                    </span>
+                  )}
                 </div>
-                <div className="max-h-32 overflow-auto text-xs space-y-1">
+                
+                <div className="max-h-48 overflow-auto space-y-2">
                   {importData.map((cam, i) => (
-                    <div key={i} className="flex items-center gap-2 text-muted-foreground">
-                      <span>•</span>
-                      <span className="font-medium text-foreground">{cam.name}</span>
-                      {cam.group && <span className="text-xs bg-primary/10 px-1.5 rounded">{cam.group}</span>}
+                    <div 
+                      key={i} 
+                      className={`p-2 rounded-md border text-xs ${
+                        cam._hasWarning 
+                          ? 'border-yellow-500/50 bg-yellow-500/5' 
+                          : 'border-border bg-background/50'
+                      }`}
+                    >
+                      {editingIndex === i ? (
+                        // Modo edición
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Input
+                              value={cam.name}
+                              onChange={(e) => handleUpdateImportedCamera(i, 'name', e.target.value)}
+                              placeholder="Nombre"
+                              className="h-7 text-xs"
+                            />
+                            <Input
+                              value={cam.group || ''}
+                              onChange={(e) => handleUpdateImportedCamera(i, 'group', e.target.value)}
+                              placeholder="Grupo"
+                              className="h-7 text-xs w-24"
+                            />
+                          </div>
+                          <Input
+                            value={cam.main_stream_url}
+                            onChange={(e) => handleUpdateImportedCamera(i, 'main_stream_url', e.target.value)}
+                            placeholder="rtsp://user:pass@ip:554/stream"
+                            className="h-7 text-xs font-mono"
+                          />
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingIndex(null)}
+                              className="h-6 px-2 text-xs"
+                            >
+                              Listo
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        // Modo visualización
+                        <div className="flex items-center gap-2">
+                          {cam._hasWarning ? (
+                            <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                          )}
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground truncate">{cam.name}</span>
+                              {cam.group && (
+                                <span className="text-[10px] bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
+                                  {cam.group}
+                                </span>
+                              )}
+                              {cam._detectedFields && Object.keys(cam._detectedFields).length > 0 && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  (mapeado: {Object.values(cam._detectedFields).join(', ')})
+                                </span>
+                              )}
+                            </div>
+                            {cam._hasWarning ? (
+                              <span className="text-yellow-500 text-[10px]">{cam._warningMessage}</span>
+                            ) : (
+                              <span className="text-muted-foreground truncate block text-[10px] font-mono">
+                                {cam.main_stream_url}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingIndex(i)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveImportedCamera(i)}
+                              className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -542,18 +775,27 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
               </div>
             )}
 
-            {/* JSON Format Help */}
+            {/* JSON Format Help - Smart Mapping Info */}
             <div className="text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
-              <p className="font-medium mb-1">Formato esperado:</p>
-              <pre className="bg-background p-2 rounded text-[10px] overflow-x-auto">
-{`[
-  {
-    "name": "Entrada",
-    "main_stream_url": "rtsp://...",
-    "group": "Planta Baja"
-  }
-]`}
-              </pre>
+              <p className="font-medium mb-1">🧠 Smart Mapping activado</p>
+              <p className="mb-2">El importador detecta automáticamente campos con diferentes nombres:</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div>
+                  <span className="font-medium">Nombre:</span> name, alias, camera_name, label, id
+                </div>
+                <div>
+                  <span className="font-medium">Stream:</span> url, stream, rtsp_url, address, ip
+                </div>
+                <div>
+                  <span className="font-medium">Grupo:</span> group, zone, area, location
+                </div>
+                <div>
+                  <span className="font-medium">Sub-stream:</span> sub, sd_stream, substream
+                </div>
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground/70">
+                💡 IPs sin protocolo se convierten automáticamente a RTSP placeholder
+              </p>
             </div>
 
             {error && (
@@ -568,11 +810,14 @@ export function AddCameraDialog({ isOpen, onClose, onSuccess }: AddCameraDialogP
                 {importResult ? 'Cerrar' : 'Cancelar'}
               </Button>
               {importData && !importResult && (
-                <Button onClick={handleBulkImport} disabled={isLoading}>
+                <Button 
+                  onClick={handleBulkImport} 
+                  disabled={isLoading || importData.filter(c => !c._hasWarning).length === 0}
+                >
                   {isLoading ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importando...</>
                   ) : (
-                    <><Upload className="w-4 h-4 mr-2" />Importar {importData.length} Cámaras</>
+                    <><Upload className="w-4 h-4 mr-2" />Importar {importData.filter(c => !c._hasWarning).length} Cámaras</>
                   )}
                 </Button>
               )}

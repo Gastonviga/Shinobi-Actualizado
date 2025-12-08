@@ -37,23 +37,12 @@ router = APIRouter(prefix="/maps", tags=["maps"])
 # Alert threshold - cameras with events in last N seconds show alert
 ALERT_THRESHOLD_SECONDS = 30
 
-# Storage path for map images - use absolute path
-def get_maps_storage_path():
-    """Get the absolute path for maps storage."""
-    base_path = settings.storage_path
-    
-    # If relative path, make it relative to PROJECT root (TitanNVR folder, not backend)
-    if not os.path.isabs(base_path):
-        # Go from app/routers/maps.py -> backend/ -> TitanNVR/
-        backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        project_root = os.path.dirname(backend_root)  # Go up one more level to TitanNVR
-        base_path = os.path.join(project_root, "storage")
-    
-    maps_path = os.path.join(base_path, "maps")
-    os.makedirs(maps_path, exist_ok=True)
-    return maps_path
+# Storage path for map images - use centralized config
+from app.config import get_absolute_storage_path
 
-MAPS_STORAGE_PATH = get_maps_storage_path()
+STORAGE_BASE = get_absolute_storage_path()
+MAPS_STORAGE_PATH = os.path.join(STORAGE_BASE, "maps")
+os.makedirs(MAPS_STORAGE_PATH, exist_ok=True)
 logger.info(f"Maps storage path: {MAPS_STORAGE_PATH}")
 
 # Allowed image extensions
@@ -62,8 +51,9 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 def get_image_url(image_path: str) -> str:
-    """Convert storage path to accessible URL."""
-    return f"/api/maps/images/{os.path.basename(image_path)}"
+    """Convert storage path to accessible URL via static mount."""
+    # Use the static file server mount instead of a custom endpoint
+    return f"/api/static/maps/{os.path.basename(image_path)}"
 
 
 # ============================================================

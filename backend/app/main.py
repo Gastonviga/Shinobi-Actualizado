@@ -5,8 +5,11 @@ Enterprise v2.0 with Authentication, Notifications, and Advanced Configuration
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -190,6 +193,18 @@ app.include_router(system_router, prefix="/api")
 app.include_router(incidents_router, prefix="/api")
 app.include_router(cloud_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
+
+# Mount static files for serving uploaded images (maps, logos, etc.)
+# Use centralized storage path configuration
+from app.config import get_absolute_storage_path
+
+STORAGE_PATH = get_absolute_storage_path()
+os.makedirs(os.path.join(STORAGE_PATH, "maps"), exist_ok=True)
+os.makedirs(os.path.join(STORAGE_PATH, "branding"), exist_ok=True)
+logger.info(f"📁 Static files served from: {STORAGE_PATH}")
+
+# Mount static directory - accessible at /api/static/maps/filename.png
+app.mount("/api/static", StaticFiles(directory=STORAGE_PATH), name="static")
 
 
 @app.get("/")
